@@ -25,8 +25,8 @@ export default function PrepaidListPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">정액권</h1>
-        <Link href="/entry" className="text-sm text-zinc-500 underline">
-          + 정액권 판매
+        <Link href="/prepaid/new" className="text-sm text-zinc-500 underline">
+          + 정액권 등록
         </Link>
       </div>
 

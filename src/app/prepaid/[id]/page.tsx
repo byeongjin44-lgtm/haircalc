@@ -29,7 +29,7 @@ import type { PrepaidEvent, PrepaidPass, SettlementSettings } from "@/lib/settle
 type ActionType = "USE" | "OTHER_DESIGNER_USE" | "REFUND" | "ADJUSTMENT";
 
 const ACTION_LABELS: Record<ActionType, string> = {
-  USE: "내가 시술",
+  USE: "정액권 사용",
   OTHER_DESIGNER_USE: "타 디자이너 사용",
   REFUND: "환불",
   ADJUSTMENT: "조정",

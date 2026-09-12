@@ -6,22 +6,31 @@
 
 ## 1. 현재 상태
 
-상태: NEXT 1~5 완료 (정액권 UI/월정산 연결까지 실제 사용 가능) / NEXT 6(모바일 실사용) 전
+상태: NEXT 1~5 완료 (정액권 UI/월정산 연결 + UX 정리까지 실제 사용 가능) / NEXT 6(모바일 실사용) 전
 
 정액권(선불권)을 데이터 모델 → 계산/원장 엔진 → UI → 홈/월정산 반영까지 전부 연결했다.
 "정액권 판매 → 목록/잔액 확인 → 사용/타디자이너 사용/환불 → 홈/월정산 반영"이
 실제로 동작한다. `prepaid.ts`의 계산 로직은 이번 PART에서 변경하지 않았다
 (엔진은 이전 PART에서 53개 테스트로 검증 완료된 상태를 그대로 사용).
 
-- 거래등록(`/entry`)에 "일반 매출 / 정액권 판매" 탭을 추가. 정액권 판매 폼은
-  `purchasePrepaidPass` 엔진을 그대로 사용하고, 사용가능금액은 기본적으로
-  실결제금액과 동일하게 채워지되 사용자가 변경할 수 있다.
-- 정액권 목록(`/prepaid`) — 식별명/구매일/실결제·사용가능금액/잔액/정산방식/상태 표시,
+- 거래등록(`/entry`)은 탭 없이 단일 화면 — 결제수단 선택지에 "정액권"을 추가했다.
+  "정액권"을 고르면 고객유형/시술유형 입력은 숨기고, 보유 중인(ACTIVE) 정액권 선택 /
+  사용금액 / 현재 잔액을 보여준다. 저장 시 `useOwnPrepaidCredit` 엔진을 그대로 사용하고,
+  나머지 카드/현금/계좌이체/플랫폼/기타 선택 시 동작은 기존과 동일하다
+  (`PaymentType` 데이터 타입에는 "정액권"을 추가하지 않았다 — entry 화면 전용 UI 선택지
+  `PaymentChoice = PaymentType | "PREPAID"`로만 분기하고, 실제 저장은 Transaction이 아닌
+  PrepaidEvent로 기록된다).
+- 정액권 등록(`/prepaid/new`) — 신규 정액권 생성 전용 화면. `purchasePrepaidPass` 엔진
+  그대로 사용, 사용가능금액 기본값은 실결제금액과 동일(수정 가능). "정액권 판매"였던
+  이전 화면을 그대로 옮기고 용어만 "정액권 등록"으로 통일했다.
+- 정액권 목록(`/prepaid`) — 상단에 [+ 정액권 등록] 버튼(`/prepaid/new`로 이동).
+  식별명/구매일/실결제·사용가능금액/잔액/정산방식/상태 표시,
   종료(DEPLETED·CLOSED)된 정액권은 회색으로 시각 구분.
-- 정액권 상세(`/prepaid/[id]`) — [내가 시술]/[타 디자이너 사용]/[환불]/[조정] 4개 액션.
-  앞의 3개는 각각 `useOwnPrepaidCredit`/`useByOtherDesigner`/`refundPrepaidCredit`을
-  저장 전 미리보기에도 그대로 재사용(같은 함수 호출 결과를 미리 보여주고, 저장 시 다시
-  호출해 실제로 기록). [조정]은 `adjustPrepaidPass`로 수동 입력값을 기록.
+- 정액권 상세(`/prepaid/[id]`) — [정액권 사용]/[타 디자이너 사용]/[환불]/[조정] 4개 액션
+  (기존 "내가 시술" 명칭을 "정액권 사용"으로 통일). 앞의 3개는 각각
+  `useOwnPrepaidCredit`/`useByOtherDesigner`/`refundPrepaidCredit`을 저장 전 미리보기에도
+  그대로 재사용(같은 함수 호출 결과를 미리 보여주고, 저장 시 다시 호출해 실제로 기록).
+  [조정]은 `adjustPrepaidPass`로 수동 입력값을 기록.
   하단에 이벤트 이력(날짜·유형·잔액영향·정산영향)을 최신순으로 표시.
 - 홈(`/`)과 월정산(`/settlement`, `/settlement/[date]`) 모두
   `combinePeriodSummary(transactions, prepaidEvents)`로 일반 거래 snapshot 합계와
@@ -347,6 +356,38 @@ dev 서버로 `/`, `/entry`, `/history`, `/settings`, `/settlement`, `/settlemen
 `/prepaid`, `/prepaid/[존재하지 않는 id]` 전부 200 응답 확인 (없는 정액권은 클라이언트에서
 "정액권을 찾을 수 없습니다" 안내, 하드 404는 아님). Claude in Chrome 확장이 이 세션에 연결되어
 있지 않아 실제 브라우저 클릭 조작 테스트는 하지 못함 — 위 검증은 UI와 동일한 함수 호출로 대체.
+
+**UX 수정 (2026-09-12, 별도 PART): 정액권 신규 등록과 정액권 결제 혼동 문제 해결**
+
+기능 테스트에서 `/entry`의 "일반 매출 / 정액권 판매" 탭이 "새 정액권 만들기"와
+"보유 정액권으로 결제"를 혼동시킨다는 문제가 확인되어 UI/라우팅만 재구성했다.
+계산 엔진(`engine.ts`, `prepaid.ts`)과 데이터 구조(`types.ts`)는 전혀 수정하지 않았다.
+
+- `/entry`: 상단 탭 제거, 단일 거래등록 화면으로 복귀. 결제수단 선택지에 "정액권"을
+  추가했지만 이는 화면 전용 타입 `PaymentChoice = PaymentType | "PREPAID"`일 뿐,
+  `PaymentType`(데이터 구조)에는 추가하지 않았다. "정액권"을 고르면 고객유형/시술유형은
+  숨기고 보유 정액권 선택(ACTIVE만) / 사용금액 / 현재 잔액을 보여주며, 저장 시
+  `useOwnPrepaidCredit`을 호출해 PrepaidEvent로 기록한다(Transaction이 아님).
+  카드/현금/계좌이체/플랫폼/기타는 기존과 동일하게 `buildTransactionSnapshot` 사용.
+- `/prepaid`: 상단 링크를 "+ 정액권 등록" → `/prepaid/new`로 변경. 목록 자체는 그대로.
+- `/prepaid/new` (신규 라우트): 기존 `/entry`의 정액권 판매 폼을 그대로 옮겼다.
+  `purchasePrepaidPass` 엔진 재사용, 버튼/메시지 문구를 "등록 저장"/"등록 완료"로 통일.
+- `/prepaid/[id]`: 액션 버튼 "내가 시술" → "정액권 사용"으로 명칭 변경 (동작은 동일,
+  `useOwnPrepaidCredit` 그대로 사용). 타 디자이너 사용/환불/조정은 변경 없음.
+- 용어 통일: "정액권 등록"(신규 생성) vs "정액권 사용"(보유 정액권으로 결제) —
+  화면 어디에도 "정액권 판매"라는 표현이 남지 않도록 정리했다(코드 내 grep으로 확인).
+
+구현 메모: `/entry`에서 정액권 사용 미리보기를 `useMemo`로 계산했더니 React Compiler
+ESLint 플러그인이 "Compilation Skipped: Existing memoization could not be preserved"
+오류를 냈다. 성능이 중요한 계산이 아니라서 `useMemo`를 걷어내고 렌더링마다 그냥
+다시 계산하는 일반 함수 호출로 바꿔 해결했다(로직 변경 없음).
+
+검증: `npm run lint`/`npm test`(기존 58개 그대로 통과)/`npm run build` 모두 통과.
+`/prepaid/new` 라우트가 정적으로 추가 생성됨을 빌드 로그로 확인. dev 서버로
+`/entry`, `/prepaid`, `/prepaid/new` 렌더링 및 "정액권 판매" 문자열이 더 이상
+없음을 확인. `/entry`에서 정액권 결제 흐름(정액권 선택 → 사용금액 입력 → 저장 →
+새로고침)을 storage.ts/prepaid.ts 함수로 직접 재현해 잔액/매출/정산 영향이
+기존 `/prepaid/[id]` 경로와 동일하게 계산됨을 확인.
 
 ### NEXT 6 — 모바일 실사용 테스트
 실제 휴대폰에서:
