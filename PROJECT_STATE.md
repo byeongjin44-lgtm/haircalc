@@ -6,18 +6,32 @@
 
 ## 1. 현재 상태
 
-상태: NEXT 1~4 완료 + NEXT 5 데이터모델/엔진 완료 (UI 제외) / 정액권 UI·월정산 연결 전
+상태: NEXT 1~5 완료 (정액권 UI/월정산 연결까지 실제 사용 가능) / NEXT 6(모바일 실사용) 전
 
-정액권(선불권) 데이터 모델과 계산/원장 엔진을 구현했다.
-`src/lib/settlement/types.ts`의 PrepaidPass/PrepaidEvent를 이번 PART의 상세 요구사항에
-맞게 다시 정의했고 (이전 NEXT2 placeholder를 대체, 다른 파일에서 참조하는 곳이 없어 안전),
-`src/lib/settlement/prepaid.ts`에 순수 함수 기반 원장 엔진을 새로 추가했다.
-기존 `engine.ts`(일반 거래 계산)는 이번 작업에서 전혀 수정하지 않았고,
-`SettlementSettings.baseIncentiveRate`만 재사용했다 (정액권에는 customerType/paymentType
-개념이 없고, MASTER의 정액권 예시들이 전부 VAT/카드수수료/재료비 없이 단순 비율 곱셈이라
-calculateSettlement 전체를 재사용하지 않기로 판단).
+정액권(선불권)을 데이터 모델 → 계산/원장 엔진 → UI → 홈/월정산 반영까지 전부 연결했다.
+"정액권 판매 → 목록/잔액 확인 → 사용/타디자이너 사용/환불 → 홈/월정산 반영"이
+실제로 동작한다. `prepaid.ts`의 계산 로직은 이번 PART에서 변경하지 않았다
+(엔진은 이전 PART에서 53개 테스트로 검증 완료된 상태를 그대로 사용).
 
-정액권 UI, 월정산 화면 연결은 아직 하지 않았다 (이번 PART 범위 밖, 지시에 따름).
+- 거래등록(`/entry`)에 "일반 매출 / 정액권 판매" 탭을 추가. 정액권 판매 폼은
+  `purchasePrepaidPass` 엔진을 그대로 사용하고, 사용가능금액은 기본적으로
+  실결제금액과 동일하게 채워지되 사용자가 변경할 수 있다.
+- 정액권 목록(`/prepaid`) — 식별명/구매일/실결제·사용가능금액/잔액/정산방식/상태 표시,
+  종료(DEPLETED·CLOSED)된 정액권은 회색으로 시각 구분.
+- 정액권 상세(`/prepaid/[id]`) — [내가 시술]/[타 디자이너 사용]/[환불]/[조정] 4개 액션.
+  앞의 3개는 각각 `useOwnPrepaidCredit`/`useByOtherDesigner`/`refundPrepaidCredit`을
+  저장 전 미리보기에도 그대로 재사용(같은 함수 호출 결과를 미리 보여주고, 저장 시 다시
+  호출해 실제로 기록). [조정]은 `adjustPrepaidPass`로 수동 입력값을 기록.
+  하단에 이벤트 이력(날짜·유형·잔액영향·정산영향)을 최신순으로 표시.
+- 홈(`/`)과 월정산(`/settlement`, `/settlement/[date]`) 모두
+  `combinePeriodSummary(transactions, prepaidEvents)`로 일반 거래 snapshot 합계와
+  정액권 이벤트(salesImpact/settlementImpact) 합계를 더해 최종 총매출/예상 정산액을 표시.
+  정액권은 항상 "이벤트 발생일(date)" 기준으로 해당 월/일에만 집계되며, 과거 이벤트
+  값은 재계산하지 않는다 (예: 9월 판매 후 10월 타디자이너 사용 환수는 10월에만 마이너스 반영).
+  월정산 상단/홈에는 "정액권 조정 ±금액" 보조 라인도 표시.
+- 실제 지급액(`MonthlyActualPayout`)은 그대로 두고, "차이" 계산 시 정액권까지 합산된
+  최종 예상 정산액과 비교하도록 자동으로 반영됨(코드 변경 없이 `summary.totalSettlementAmount`가
+  이미 combined 값이므로).
 
 Next.js + TypeScript + Tailwind 프로젝트, 모바일 퍼스트 레이아웃(하단 탭 내비게이션),
 홈 / 거래등록 / 내역 / 월정산 / 설정 5개 라우트 + 월정산 날짜별 상세(`/settlement/[date]`)
@@ -47,7 +61,7 @@ PrepaidEvent, MonthlyAdjustment, MonthlyActualPayout 타입을 정의했고,
   `localStorage`에 별도 저장 — `MonthlyAdjustment`(보너스/공제 등 이벤트 목록)와는
   용도가 달라 재사용하지 않음.
 
-아직 하지 않은 것: 정액권 UI/계산(NEXT 5), 거래 수정/삭제, PWA.
+아직 하지 않은 것: 거래/정액권 이벤트 수정·삭제, PWA, 모바일 실사용 테스트(NEXT 6).
 
 ---
 
@@ -248,12 +262,14 @@ Claude Code로:
   클릭 조작 테스트는 수행하지 못했다. 위 검증은 UI가 호출하는 동일 함수를
   그대로 실행한 결과이며, 브라우저 수동 확인을 권장한다.
 
-### NEXT 5 — 정액권
+### NEXT 5 — 정액권 (완료)
 - [x] 데이터 모델 (`PrepaidPass`, `PrepaidEvent` — `src/lib/settlement/types.ts`)
 - [x] 계산/원장 엔진 (`src/lib/settlement/prepaid.ts`, 순수 함수)
 - [x] 유닛 테스트 (`src/lib/settlement/prepaid.test.ts`, 21개, 지정된 15개 시나리오 + 잔액 무결성 추가 가드 4개)
-- [ ] UI (판매/사용/환불/조정 입력 화면) — 다음 PART
-- [ ] 월정산 화면 연결 (정액권 반영액/환수, 홈 화면 정액권 조정) — 다음 PART
+- [x] 저장소 (`storage.ts`에 `loadPrepaidPasses`/`upsertPrepaidPass`/`loadPrepaidEvents`/
+  `appendPrepaidEvent`/`recordPrepaidLedgerResult` 추가, localStorage 기반, 서버/DB 없음)
+- [x] UI: 판매(`/entry` 탭) / 목록(`/prepaid`) / 상세+사용·타디자이너·환불·조정(`/prepaid/[id]`)
+- [x] 홈/월정산/날짜상세 연결 (`combinePeriodSummary`로 일반 거래 + 정액권 이벤트 합산)
 
 **데이터 모델 요약**
 - `PrepaidPass`: id, purchaseDate, paidAmount, creditAmount, remainingBalance,
@@ -282,6 +298,55 @@ USE_BASED는 구매 시 영향 없음, 본인 사용 시점에 인식, 타디자
 
 테스트: `npm test` — engine 16 + month 9 + summary 7 + prepaid 21 = 53개, 전부 통과.
 `npm run lint`, `npm run build`(typecheck 포함)도 모두 통과.
+
+**UI 연결 (이번 PART 추가)**
+- `src/app/entry/page.tsx`: "일반 매출 / 정액권 판매" 탭. 정액권 판매 폼은
+  `purchasePrepaidPass` 사용, 사용가능금액 기본값 = 실결제금액(수정 가능).
+- `src/app/prepaid/page.tsx`: 정액권 목록. 식별명/구매일/실결제·사용가능금액/잔액/
+  정산방식/상태 표시, 종료된 정액권은 회색으로 구분.
+- `src/app/prepaid/[id]/page.tsx`: 상세 + [내가 시술]/[타 디자이너 사용]/[환불]/[조정].
+  앞 3개는 `useOwnPrepaidCredit`/`useByOtherDesigner`/`refundPrepaidCredit`을 저장 전
+  미리보기와 실제 저장에 동일하게 재사용. `[조정]`은 `adjustPrepaidPass`로 수동 입력.
+  하단에 이벤트 이력(날짜·유형·잔액영향·정산영향)을 최신순으로 표시.
+  (구현 메모: `useOwnPrepaidCredit`/`useByOtherDesigner`처럼 이름이 "use"로 시작하는
+  일반 함수를 컴포넌트 안에서 호출하면 eslint `react-hooks` 규칙이 React 훅으로 오인해
+  오류가 나서, import 시 `applyOwnUse`/`applyOtherDesignerUse`로 별칭만 붙였다.
+  prepaid.ts의 실제 함수/로직은 변경하지 않음.)
+- `src/app/page.tsx`(홈), `src/app/settlement/page.tsx`, `src/app/settlement/[date]/page.tsx`:
+  `summary.ts`에 추가한 `filterPrepaidEventsByMonth`/`filterPrepaidEventsByDate`/
+  `groupPrepaidEventsByDate`/`summarizePrepaidEvents`/`combinePeriodSummary`로
+  일반 거래 합계 + 정액권 이벤트 영향을 더해 표시. 정액권은 이벤트의 `date` 기준으로
+  월/일에 귀속되며, 과거 이벤트를 수정해 지난달 숫자를 바꾸지 않는다.
+  홈/월정산 상단에 "정액권 조정 ±금액" 보조 라인 추가.
+
+**통합 테스트 (이번 PART 추가, 지시된 A~E 시나리오)**
+- `src/lib/settlement/prepaid-integration.test.ts` (4개): A) 9월 일반매출 100만+정산 40만
+  + SALE_IMMEDIATE 정액권 판매 100만/정산 40만 → 9월 합계 200만/80만.
+  B) 10월 타디자이너 사용 20만 환수 → 10월 매출 -20만/정산 -8만, 9월 합계는 불변(100만/40만).
+  C) USE_BASED 구매(구매월 영향 0) → 다음달 본인 사용 20만 → 사용월 매출 +20만/정산 +8만.
+  D) PAID_RATIO 100만/110만 보너스권 22만 사용 → 매출 +20만/정산 +8만.
+- `src/lib/settlement/prepaid-storage.test.ts` (1개, 시나리오 E): 판매+본인사용 후
+  localStorage에서 다시 읽어도(=새로고침) 잔액/이벤트 수/월합계가 동일함을 확인.
+- 최종 테스트 수: engine 16 + month 9 + summary 7 + prepaid 21 + prepaid-integration 4 +
+  prepaid-storage 1 = **58개, 전부 통과**.
+
+**엔드투엔드 수동 검증** (UI가 호출하는 동일 함수로 재현, localStorage는 in-memory로 대체):
+1. 일반 매출 100만원 등록 → 정산 40만원
+2. SALE_IMMEDIATE 100만원권 판매 → 매출 100만/정산 40만원 반영
+3. 목록 조회 → 정액권 1건, 잔액 100만원
+4. 내가 시술 20만원 사용 → 잔액 80만원, 매출/정산 영향 0 (SALE_IMMEDIATE라 이미 인식됨)
+5. 타 디자이너 사용 10만원 → 잔액 70만원, 매출 -10만/정산 -4만
+6. 환불 20만원 → 잔액 50만원, 매출 -20만/정산 -8만
+7. 9월 합계 = 일반(100만/40만) + 정액권 순영향(100만-10만-20만=70만 / 40만-4만-8만=28만)
+   = 총매출 170만원, 예상 정산액 68만원
+8. 9/18(타디자이너 사용일) 날짜 상세 = 매출 -10만원, 정산 -4만원
+9. "새로고침" 후 정액권 1건/이벤트 4건/잔액 50만원/9월 합계 170만·68만 모두 동일
+→ 전부 기대값과 일치.
+
+dev 서버로 `/`, `/entry`, `/history`, `/settings`, `/settlement`, `/settlement/2026-09-12`,
+`/prepaid`, `/prepaid/[존재하지 않는 id]` 전부 200 응답 확인 (없는 정액권은 클라이언트에서
+"정액권을 찾을 수 없습니다" 안내, 하드 404는 아님). Claude in Chrome 확장이 이 세션에 연결되어
+있지 않아 실제 브라우저 클릭 조작 테스트는 하지 못함 — 위 검증은 UI와 동일한 함수 호출로 대체.
 
 ### NEXT 6 — 모바일 실사용 테스트
 실제 휴대폰에서:

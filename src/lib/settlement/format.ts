@@ -14,6 +14,13 @@ export function formatWon(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}원`;
 }
 
+/** 부호를 항상 표시하는 금액 표기 (정액권 조정/환수처럼 +/-가 중요한 값에 사용). */
+export function formatSignedWon(amount: number): string {
+  if (amount === 0) return "0원";
+  const sign = amount > 0 ? "+" : "-";
+  return `${sign}${Math.abs(amount).toLocaleString("ko-KR")}원`;
+}
+
 /** 달력 셀처럼 좁은 공간에 쓰는 "만원" 단위 축약 표기 (예: 580,000 -> "58만"). */
 export function formatManWon(amount: number): string {
   if (amount === 0) return "-";

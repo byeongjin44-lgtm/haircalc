@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { formatManWon, formatWon } from "@/lib/settlement/format";
+import { formatManWon, formatSignedWon, formatWon } from "@/lib/settlement/format";
 import {
   buildDateString,
   currentMonthKey,
@@ -11,27 +11,37 @@ import {
   getFirstWeekday,
   shiftMonthKey,
 } from "@/lib/settlement/month";
-import { filterByMonth, groupByDate, summarizeTransactions } from "@/lib/settlement/summary";
+import {
+  combinePeriodSummary,
+  filterByMonth,
+  filterPrepaidEventsByMonth,
+  groupByDate,
+  groupPrepaidEventsByDate,
+} from "@/lib/settlement/summary";
 import {
   loadMonthlyActualPayout,
+  loadPrepaidEvents,
   loadTransactions,
   saveMonthlyActualPayout,
 } from "@/lib/settlement/storage";
-import type { Transaction } from "@/lib/settlement/types";
+import type { PrepaidEvent, Transaction } from "@/lib/settlement/types";
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function SettlementPage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
+  const [prepaidEvents, setPrepaidEvents] = useState<PrepaidEvent[] | null>(null);
   const [monthKey, setMonthKey] = useState(() => currentMonthKey());
   const [actualPayoutText, setActualPayoutText] = useState("");
   const [payoutSaved, setPayoutSaved] = useState(false);
 
   useEffect(() => {
-    const loaded = loadTransactions();
+    const loadedTransactions = loadTransactions();
+    const loadedPrepaidEvents = loadPrepaidEvents();
     // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTransactions(loaded);
+    setTransactions(loadedTransactions);
+    setPrepaidEvents(loadedPrepaidEvents);
   }, []);
 
   useEffect(() => {
@@ -46,13 +56,21 @@ export default function SettlementPage() {
     () => (transactions ? filterByMonth(transactions, monthKey) : []),
     [transactions, monthKey]
   );
-  const summary = useMemo(
-    () => summarizeTransactions(monthTransactions),
-    [monthTransactions]
+  const monthPrepaidEvents = useMemo(
+    () => (prepaidEvents ? filterPrepaidEventsByMonth(prepaidEvents, monthKey) : []),
+    [prepaidEvents, monthKey]
   );
-  const dailyGroups = useMemo(
+  const summary = useMemo(
+    () => combinePeriodSummary(monthTransactions, monthPrepaidEvents),
+    [monthTransactions, monthPrepaidEvents]
+  );
+  const dailyTxGroups = useMemo(
     () => groupByDate(monthTransactions),
     [monthTransactions]
+  );
+  const dailyPrepaidGroups = useMemo(
+    () => groupPrepaidEventsByDate(monthPrepaidEvents),
+    [monthPrepaidEvents]
   );
 
   const actualPayoutAmount =
@@ -72,7 +90,7 @@ export default function SettlementPage() {
   const daysInMonth = getDaysInMonth(monthKey);
   const leadingBlanks = getFirstWeekday(monthKey);
 
-  if (!transactions) {
+  if (!transactions || !prepaidEvents) {
     return <p className="text-sm text-zinc-400">불러오는 중...</p>;
   }
 
@@ -108,6 +126,11 @@ export default function SettlementPage() {
           <p className="mt-1 text-lg font-semibold">
             {formatWon(summary.totalSettlementAmount)}
           </p>
+          {summary.prepaidImpact.settlementImpact !== 0 && (
+            <p className="text-[11px] text-zinc-400">
+              정액권 조정 {formatSignedWon(summary.prepaidImpact.settlementImpact)}
+            </p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500">실제 지급액</p>
@@ -154,8 +177,9 @@ export default function SettlementPage() {
           ))}
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
             const dateStr = buildDateString(monthKey, day);
-            const dayTransactions = dailyGroups[dateStr] ?? [];
-            const daySummary = summarizeTransactions(dayTransactions);
+            const dayTransactions = dailyTxGroups[dateStr] ?? [];
+            const dayPrepaidEvents = dailyPrepaidGroups[dateStr] ?? [];
+            const daySummary = combinePeriodSummary(dayTransactions, dayPrepaidEvents);
 
             return (
               <Link

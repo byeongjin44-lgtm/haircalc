@@ -1,7 +1,11 @@
 import type {
+  BonusSettlementMode,
   CustomerType,
   MaterialCostMode,
   PaymentType,
+  PrepaidEventType,
+  PrepaidPassStatus,
+  PrepaidRecognitionMode,
   ServiceType,
   VatMode,
 } from "./types.ts";
@@ -76,4 +80,38 @@ export const MATERIAL_COST_MODE_LABELS: Record<MaterialCostMode, string> = {
   NONE: "사용 안 함",
   PERCENT: "비율(%)",
   FIXED: "고정금액(원)",
+};
+
+export const PREPAID_RECOGNITION_MODES: readonly PrepaidRecognitionMode[] = [
+  "SALE_IMMEDIATE",
+  "USE_BASED",
+];
+
+export const BONUS_SETTLEMENT_MODES: readonly BonusSettlementMode[] = [
+  "CREDIT_AMOUNT",
+  "PAID_RATIO",
+];
+
+export const PREPAID_RECOGNITION_MODE_LABELS: Record<PrepaidRecognitionMode, string> = {
+  SALE_IMMEDIATE: "판매 즉시 반영",
+  USE_BASED: "사용 시 반영",
+};
+
+export const BONUS_SETTLEMENT_MODE_LABELS: Record<BonusSettlementMode, string> = {
+  CREDIT_AMOUNT: "차감금액 기준",
+  PAID_RATIO: "실결제 비율 환산",
+};
+
+export const PREPAID_EVENT_TYPE_LABELS: Record<PrepaidEventType, string> = {
+  PURCHASE: "정액권 구매",
+  USE: "본인 사용",
+  OTHER_DESIGNER_USE: "타 디자이너 사용",
+  REFUND: "환불",
+  ADJUSTMENT: "조정",
+};
+
+export const PREPAID_PASS_STATUS_LABELS: Record<PrepaidPassStatus, string> = {
+  ACTIVE: "사용 가능",
+  DEPLETED: "소진",
+  CLOSED: "종료",
 };

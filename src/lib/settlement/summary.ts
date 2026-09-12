@@ -3,7 +3,7 @@
 // 현재 SettlementSettings로 재계산하지 않는다.
 
 import { monthKeyOf } from "./month.ts";
-import type { Transaction } from "./types.ts";
+import type { PrepaidEvent, Transaction } from "./types.ts";
 
 export interface PeriodSummary {
   totalAmount: number;
@@ -56,5 +56,73 @@ export function summarizeTransactions(transactions: Transaction[]): PeriodSummar
     transactionCount,
     averageAmount,
     averageRate,
+  };
+}
+
+// --- 정액권 이벤트 집계 ---
+// PrepaidEvent도 Transaction과 동일하게 "이벤트 발생일(date)" 기준으로 월/일에 귀속시킨다.
+// 과거 이벤트(예: 구매)를 수정하지 않고, 나중에 생긴 이벤트(예: 타디자이너 사용)는
+// 그 이벤트가 실제로 발생한 달에만 영향을 준다.
+
+export function filterPrepaidEventsByMonth(
+  events: PrepaidEvent[],
+  monthKey: string
+): PrepaidEvent[] {
+  return events.filter((event) => monthKeyOf(event.date) === monthKey);
+}
+
+export function filterPrepaidEventsByDate(
+  events: PrepaidEvent[],
+  date: string
+): PrepaidEvent[] {
+  return events.filter((event) => event.date === date);
+}
+
+export function groupPrepaidEventsByDate(
+  events: PrepaidEvent[]
+): Record<string, PrepaidEvent[]> {
+  const grouped: Record<string, PrepaidEvent[]> = {};
+  for (const event of events) {
+    (grouped[event.date] ??= []).push(event);
+  }
+  return grouped;
+}
+
+export interface PrepaidImpactSummary {
+  salesImpact: number;
+  settlementImpact: number;
+}
+
+export function summarizePrepaidEvents(events: PrepaidEvent[]): PrepaidImpactSummary {
+  return {
+    salesImpact: events.reduce((sum, event) => sum + event.salesImpact, 0),
+    settlementImpact: events.reduce((sum, event) => sum + event.settlementImpact, 0),
+  };
+}
+
+/**
+ * 일반 Transaction 합계 + 정액권 이벤트 영향을 더한 최종 매출/정산액.
+ * 일반 거래 snapshot과 정액권 이벤트 snapshot을 그대로 합산할 뿐, 어느 쪽도 재계산하지 않는다.
+ */
+export interface CombinedPeriodSummary {
+  transactionSummary: PeriodSummary;
+  prepaidImpact: PrepaidImpactSummary;
+  totalAmount: number;
+  totalSettlementAmount: number;
+}
+
+export function combinePeriodSummary(
+  transactions: Transaction[],
+  prepaidEvents: PrepaidEvent[]
+): CombinedPeriodSummary {
+  const transactionSummary = summarizeTransactions(transactions);
+  const prepaidImpact = summarizePrepaidEvents(prepaidEvents);
+
+  return {
+    transactionSummary,
+    prepaidImpact,
+    totalAmount: transactionSummary.totalAmount + prepaidImpact.salesImpact,
+    totalSettlementAmount:
+      transactionSummary.totalSettlementAmount + prepaidImpact.settlementImpact,
   };
 }
