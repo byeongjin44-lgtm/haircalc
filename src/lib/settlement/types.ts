@@ -147,3 +147,10 @@ export interface MonthlyAdjustment {
   memo?: string;
   createdAt: string;
 }
+
+/** 월별 실제 지급액 (매장에서 실제로 입금/지급한 금액). 월정산 화면에서 예상 정산액과 비교한다. */
+export interface MonthlyActualPayout {
+  month: string; // YYYY-MM
+  amount: number;
+  updatedAt: string;
+}

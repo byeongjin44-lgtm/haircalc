@@ -14,6 +14,13 @@ export function formatWon(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}원`;
 }
 
+/** 달력 셀처럼 좁은 공간에 쓰는 "만원" 단위 축약 표기 (예: 580,000 -> "58만"). */
+export function formatManWon(amount: number): string {
+  if (amount === 0) return "-";
+  const man = Math.round((amount / 10_000) * 10) / 10;
+  return `${man}만`;
+}
+
 /** 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD). new Date().toISOString()은 UTC 기준이라 자정 근처에 날짜가 하루 밀릴 수 있다. */
 export function todayDateString(): string {
   const now = new Date();
