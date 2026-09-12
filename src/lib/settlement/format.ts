@@ -1,0 +1,22 @@
+/** UI의 "%" 입력 문자열을 0~1 비율로 변환한다. 파싱 실패 시 fallback을 반환한다. */
+export function percentToRate(percentText: string, fallback = 0): number {
+  const value = Number(percentText);
+  if (!Number.isFinite(value)) return fallback;
+  return value / 100;
+}
+
+/** 0~1 비율을 "%" 입력창에 표시할 문자열로 변환한다 (부동소수점 오차 제거). */
+export function rateToPercent(rate: number): string {
+  return String(Math.round(rate * 100 * 100) / 100);
+}
+
+export function formatWon(amount: number): string {
+  return `${amount.toLocaleString("ko-KR")}원`;
+}
+
+/** 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD). new Date().toISOString()은 UTC 기준이라 자정 근처에 날짜가 하루 밀릴 수 있다. */
+export function todayDateString(): string {
+  const now = new Date();
+  const localTime = now.getTime() - now.getTimezoneOffset() * 60_000;
+  return new Date(localTime).toISOString().slice(0, 10);
+}
