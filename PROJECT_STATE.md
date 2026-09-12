@@ -6,7 +6,18 @@
 
 ## 1. 현재 상태
 
-상태: NEXT 1~4 완료 (정액권 제외) / NEXT 5(정액권) 착수 전
+상태: NEXT 1~4 완료 + NEXT 5 데이터모델/엔진 완료 (UI 제외) / 정액권 UI·월정산 연결 전
+
+정액권(선불권) 데이터 모델과 계산/원장 엔진을 구현했다.
+`src/lib/settlement/types.ts`의 PrepaidPass/PrepaidEvent를 이번 PART의 상세 요구사항에
+맞게 다시 정의했고 (이전 NEXT2 placeholder를 대체, 다른 파일에서 참조하는 곳이 없어 안전),
+`src/lib/settlement/prepaid.ts`에 순수 함수 기반 원장 엔진을 새로 추가했다.
+기존 `engine.ts`(일반 거래 계산)는 이번 작업에서 전혀 수정하지 않았고,
+`SettlementSettings.baseIncentiveRate`만 재사용했다 (정액권에는 customerType/paymentType
+개념이 없고, MASTER의 정액권 예시들이 전부 VAT/카드수수료/재료비 없이 단순 비율 곱셈이라
+calculateSettlement 전체를 재사용하지 않기로 판단).
+
+정액권 UI, 월정산 화면 연결은 아직 하지 않았다 (이번 PART 범위 밖, 지시에 따름).
 
 Next.js + TypeScript + Tailwind 프로젝트, 모바일 퍼스트 레이아웃(하단 탭 내비게이션),
 홈 / 거래등록 / 내역 / 월정산 / 설정 5개 라우트 + 월정산 날짜별 상세(`/settlement/[date]`)
@@ -238,11 +249,39 @@ Claude Code로:
   그대로 실행한 결과이며, 브라우저 수동 확인을 권장한다.
 
 ### NEXT 5 — 정액권
-- 판매
-- 사용
-- 환불
-- 조정
-- 잔액
+- [x] 데이터 모델 (`PrepaidPass`, `PrepaidEvent` — `src/lib/settlement/types.ts`)
+- [x] 계산/원장 엔진 (`src/lib/settlement/prepaid.ts`, 순수 함수)
+- [x] 유닛 테스트 (`src/lib/settlement/prepaid.test.ts`, 21개, 지정된 15개 시나리오 + 잔액 무결성 추가 가드 4개)
+- [ ] UI (판매/사용/환불/조정 입력 화면) — 다음 PART
+- [ ] 월정산 화면 연결 (정액권 반영액/환수, 홈 화면 정액권 조정) — 다음 PART
+
+**데이터 모델 요약**
+- `PrepaidPass`: id, purchaseDate, paidAmount, creditAmount, remainingBalance,
+  recognitionMode(`SALE_IMMEDIATE`|`USE_BASED`), bonusSettlementMode(`CREDIT_AMOUNT`|`PAID_RATIO`),
+  status(`ACTIVE`|`DEPLETED`|`CLOSED`), label?, memo?, createdAt.
+  다중 디자이너 필드(originalOwner 등)는 두지 않음 — 단일 사용자 앱 전제.
+- `PrepaidEvent`: id, prepaidPassId, type(`PURCHASE`|`USE`|`OTHER_DESIGNER_USE`|`REFUND`|`ADJUSTMENT`),
+  date, creditAmountImpact, salesImpact, settlementImpact, commissionRateSnapshot?, memo?, createdAt.
+  과거 이벤트는 수정하지 않고 새 이벤트만 추가 — 잔액은 이벤트의 creditAmountImpact 합으로 재계산 가능
+  (`calculateBalanceFromEvents`로 검증).
+
+**핵심 함수 (`src/lib/settlement/prepaid.ts`)**
+`purchasePrepaidPass` / `useOwnPrepaidCredit` / `useByOtherDesigner` / `refundPrepaidCredit` /
+`adjustPrepaidPass` / `closePrepaidPass` / `convertCreditToSalesAmount` / `calculateBalanceFromEvents`.
+
+계산 규칙: SALE_IMMEDIATE는 구매 시 `paidAmount`(보너스 제외 실결제액) 기준으로 매출/정산을
+즉시 인식하고, 본인 사용은 영향 없음, 타디자이너 사용/환불은 환수(음수 반영).
+USE_BASED는 구매 시 영향 없음, 본인 사용 시점에 인식, 타디자이너 사용/환불은 영향 없음.
+보너스권은 `bonusSettlementMode`에 따라 차감액을 그대로(CREDIT_AMOUNT) 또는
+실결제 비율로 환산(PAID_RATIO, `creditAmount × paidAmount/creditAmount`, MASTER 예시
+220,000 × 100만/110만 = 200,000과 일치)해 매출을 계산한다.
+모든 정산 영향값은 이벤트 생성 시점 `settings.baseIncentiveRate`를 snapshot으로 고정 —
+이후 설정이 바뀌어도 과거 이벤트 값은 불변 (테스트로 확인).
+잔액 무결성: 초과 사용/환불 차단, 종료(CLOSED)된 정액권 추가 사용 차단,
+조정이 0 미만 또는 creditAmount 초과로 가지 않도록 차단.
+
+테스트: `npm test` — engine 16 + month 9 + summary 7 + prepaid 21 = 53개, 전부 통과.
+`npm run lint`, `npm run build`(typecheck 포함)도 모두 통과.
 
 ### NEXT 6 — 모바일 실사용 테스트
 실제 휴대폰에서:

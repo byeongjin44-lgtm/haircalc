@@ -93,41 +93,62 @@ export interface Transaction {
   updatedAt: string;
 }
 
-// --- 정액권 (구조만 정의. 이번 단계에서는 계산 엔진/UI를 만들지 않는다) ---
+// --- 정액권 (선불권) ---
+// 이 앱은 단일 헤어 디자이너 개인용이므로 다른 디자이너 계정/직원 목록은 두지 않는다.
+// "타 디자이너 사용"은 현재 사용자의 매출/정산에서 환수되는 이벤트로만 표현한다.
 
-export type PrepaidRecognitionMode = "ON_PURCHASE" | "ON_USE";
+/** SALE_IMMEDIATE: 판매 시 즉시 매출/정산 반영. USE_BASED: 실제 사용 시점에 반영. */
+export type PrepaidRecognitionMode = "SALE_IMMEDIATE" | "USE_BASED";
+
+/**
+ * 보너스 정액권(사용가능액 > 실결제액)에서 사용분의 정산 대상 매출을 환산하는 방식.
+ * CREDIT_AMOUNT: 차감된 사용가능액을 그대로 매출로 인정.
+ * PAID_RATIO: 실결제 비율로 환산 (예: 220,000 사용, 100만/110만 비율 -> 200,000).
+ */
+export type BonusSettlementMode = "CREDIT_AMOUNT" | "PAID_RATIO";
 
 export type PrepaidPassStatus = "ACTIVE" | "DEPLETED" | "CLOSED";
 
 export interface PrepaidPass {
   id: string;
   purchaseDate: string;
-  /** 실결제금액 */
+  /** 실결제금액. SALE_IMMEDIATE 모드의 매출 인식 기준이 된다. */
   paidAmount: number;
-  /** 보너스 포함 사용가능금액. paidAmount와 분리 저장한다. */
+  /** 보너스 포함 실제 사용 가능한 총액. paidAmount와 분리 저장한다. */
   creditAmount: number;
   remainingBalance: number;
-  originalOwner: string;
   recognitionMode: PrepaidRecognitionMode;
+  bonusSettlementMode: BonusSettlementMode;
   status: PrepaidPassStatus;
+  label?: string;
+  memo?: string;
   createdAt: string;
 }
 
 export type PrepaidEventType =
   | "PURCHASE"
   | "USE"
+  | "OTHER_DESIGNER_USE"
   | "REFUND"
-  | "TRANSFER"
   | "ADJUSTMENT";
 
+/**
+ * 정액권 원장 이벤트. 과거 이벤트는 수정하지 않고 새 이벤트를 추가해 이력을 유지한다.
+ * 잔액은 이 이벤트들의 creditAmountImpact 합으로 재계산 가능해야 한다.
+ */
 export interface PrepaidEvent {
   id: string;
   prepaidPassId: string;
   type: PrepaidEventType;
-  amount: number;
-  owner: string;
-  settlementImpact: number;
   date: string;
+  /** 정액권 잔액(remainingBalance)에 대한 영향. 사용/환불은 음수, 구매/조정 적립은 양수. */
+  creditAmountImpact: number;
+  /** 현재 디자이너 기준 매출 영향. */
+  salesImpact: number;
+  /** 현재 디자이너 기준 정산 영향 (이벤트 생성 당시 설정으로 계산해 고정한 snapshot 값). */
+  settlementImpact: number;
+  /** 이벤트 생성 당시 적용된 인센티브율 snapshot. ADJUSTMENT처럼 자동 계산이 없는 이벤트는 비워둔다. */
+  commissionRateSnapshot?: number;
   memo?: string;
   createdAt: string;
 }
