@@ -17,12 +17,16 @@ export default function HomePage() {
   const [prepaidEvents, setPrepaidEvents] = useState<PrepaidEvent[] | null>(null);
 
   useEffect(() => {
-    const loadedTransactions = loadTransactions();
-    const loadedPrepaidEvents = loadPrepaidEvents();
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTransactions(loadedTransactions);
-    setPrepaidEvents(loadedPrepaidEvents);
+    (async () => {
+      const [loadedTransactions, loadedPrepaidEvents] = await Promise.all([
+        loadTransactions(),
+        loadPrepaidEvents(),
+      ]);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setTransactions(loadedTransactions);
+      setPrepaidEvents(loadedPrepaidEvents);
+    })();
   }, []);
 
   if (!transactions || !prepaidEvents) {

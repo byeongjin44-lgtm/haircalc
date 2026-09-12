@@ -6,7 +6,11 @@
 
 ## 1. 현재 상태
 
-상태: NEXT 1~5 완료 (정액권 UI/월정산 연결 + UX 정리까지 실제 사용 가능) / NEXT 6(모바일 실사용) 전
+상태: NEXT 1~6 완료 (정액권 + IndexedDB 전환/백업/복원까지 실제 사용 가능) / NEXT 7(모바일 실사용) 전
+
+저장소를 localStorage에서 IndexedDB로 전환하고, 기존 localStorage 데이터 자동
+마이그레이션 + JSON 전체 백업/복원 + 전체 데이터 삭제를 `/settings`에 추가했다.
+정산 계산 엔진은 전혀 수정하지 않았다 (자세한 내용은 아래 "NEXT 6" 참고).
 
 정액권(선불권)을 데이터 모델 → 계산/원장 엔진 → UI → 홈/월정산 반영까지 전부 연결했다.
 "정액권 판매 → 목록/잔액 확인 → 사용/타디자이너 사용/환불 → 홈/월정산 반영"이
@@ -389,7 +393,85 @@ ESLint 플러그인이 "Compilation Skipped: Existing memoization could not be p
 새로고침)을 storage.ts/prepaid.ts 함수로 직접 재현해 잔액/매출/정산 영향이
 기존 `/prepaid/[id]` 경로와 동일하게 계산됨을 확인.
 
-### NEXT 6 — 모바일 실사용 테스트
+### NEXT 6 — 저장소 IndexedDB 전환 + 마이그레이션/백업/복원/전체삭제 (완료)
+
+localStorage 기반 저장을 IndexedDB로 전환했다. 정산 계산 엔진(`engine.ts`, `prepaid.ts`)은
+전혀 수정하지 않았고, `storage.ts`의 공개 함수 이름/역할은 그대로 유지한 채 전부
+동기 → 비동기로 바꿨다 (UI는 여전히 `storage.ts`만 알고 IndexedDB 구현을 모른다).
+
+**저장 계층 구조 (레코드 단위 저장)**
+- `src/lib/settlement/recordStore.ts` — 저장소 추상 인터페이스(`RecordStore`)와
+  store 이름(`settings`/`transactions`/`prepaidPasses`/`prepaidEvents`/
+  `monthlyActualPayouts`/`meta`) 정의. Transaction/PrepaidPass/PrepaidEvent는
+  레코드(문서) 단위로 저장되어, 하나 추가/수정할 때 배열 전체를 다시 쓰지 않는다.
+- `src/lib/settlement/recordStore.indexeddb.ts` — 실제 브라우저 구현 (IndexedDB).
+  SSR에서는 절대 호출되지 않는다 (storage.ts가 `isBrowser()`로 먼저 막는다).
+- `src/lib/settlement/recordStore.memory.ts` — 테스트 전용 메모리 구현.
+  Node에는 IndexedDB가 없어서, migration.ts/backup.ts 로직을 이 메모리 구현으로
+  실제 IndexedDB 없이도 완전히 테스트할 수 있게 만들었다 (새 라이브러리 추가 없이 해결).
+- `src/lib/settlement/migration.ts` — legacy localStorage(v1) → IndexedDB 자동 이전.
+- `src/lib/settlement/backup.ts` — JSON 전체 백업/복원.
+- `src/lib/settlement/storage.ts` — 위 세 파일을 조합한 공개 API (UI가 보는 유일한 창).
+
+**자동 마이그레이션 규칙**
+1. IndexedDB가 비어있고 legacy localStorage에 데이터가 있을 때만 복사한다.
+2. 복사 후 반드시 검증(개수 + snapshot 값 완전 일치)하고, 실패하면 완료 플래그를
+   남기지 않는다 (다음 로드에서 재시도 가능, legacy 데이터도 건드리지 않으므로 안전).
+3. 완료 플래그(IndexedDB의 `meta` store)가 있거나 IndexedDB에 이미 데이터가 있으면
+   항상 아무 것도 하지 않는다 — 여러 번 실행해도 중복 생성/덮어쓰기가 없다.
+4. v0.1 원칙대로 마이그레이션 성공 후에도 legacy localStorage는 즉시 삭제하지 않는다
+   (데이터 유실 방지 우선). legacy 삭제는 "모든 데이터 삭제" 기능에서만 일어난다.
+
+**`/settings`에 데이터 관리 영역 추가**
+- [백업 파일 내보내기]: 전체 데이터를 `haircalc-backup-YYYY-MM-DD.json` 파일로 다운로드.
+  포맷: `{backupVersion, schemaVersion, exportedAt, settings, transactions,
+  prepaidPasses, prepaidEvents, monthlyActualPayouts}`.
+- [백업 파일에서 복원]: JSON 파싱 실패/구조 불일치/미래 버전(backupVersion·schemaVersion이
+  현재보다 높음)을 모두 `validateBackup`으로 차단. 통과해도 `window.confirm`으로 한 번 더
+  확인 후 전체 교체 복원만 수행 (병합 복원 없음 — 기존 데이터는 복원 전 전부 지운다).
+- [모든 데이터 삭제]: `window.confirm` 확인 후 IndexedDB 전체 + 마이그레이션 플래그 +
+  legacy localStorage까지 전부 삭제. 삭제 후 정산 설정은 기본값으로 정상 시작된다.
+
+**테스트**: 기존 57개(engine 16 + month 9 + summary 7 + prepaid 21 + prepaid-integration 4)는
+그대로 유지. localStorage 동기 API에 직접 의존하던 `prepaid-storage.test.ts`는 저장 계층이
+비동기/IndexedDB로 바뀌면서 그대로 쓸 수 없어 제거하고, 같은 취지(저장 후 재조회 시 동일)를
+더 폭넓게 검증하는 `migration.test.ts`(7개) + `backup.test.ts`(7개)로 대체했다.
+합계 `npm test` **71개, 전부 통과** (57 + 7 + 7).
+
+지정된 A~J 시나리오 매핑:
+- A(빈 IndexedDB 초기화), D(2회 실행해도 중복 없음), E(기존 IndexedDB 데이터가
+  legacy로 덮어써지지 않음), J(전체 삭제 정상) → `migration.test.ts`
+- B/C(legacy 데이터 → migration → 동일 데이터/snapshot 완전 일치) → `migration.test.ts`
+- F(export 전체 포함), G(export → 삭제 → restore → 완전 복구, 병합 아님 확인),
+  H(잘못된 JSON 차단), I(지원하지 않는 version 차단) → `backup.test.ts`
+
+**실사용 시나리오 검증 (섹션 10, 실제 숫자)**: Node에는 IndexedDB가 없어, 이 스크립트
+안에서만 쓰는 최소 가짜 IndexedDB(open/transaction/objectStore get·getAll·put·delete·clear,
+실제와 동일하게 비동기 이벤트로 동작)를 만들어 `storage.ts`/`migration.ts`/`backup.ts`/
+`recordStore.indexeddb.ts` 실제 코드를 그대로 실행해 검증했다 (memory store를 쓰는
+단위테스트와 별개로, 진짜 IndexedDB 어댑터 코드 경로까지 확인한 것). 시나리오:
+일반 거래 3건(30만/15만/8만원) + SALE_IMMEDIATE 정액권 등록(100만) 후 본인 사용 20만
+(SALE_IMMEDIATE라 영향 0) → 타 디자이너 사용 10만(-10만 매출/-4만 정산) → 환불 5만
+(-5만 매출/-2만 정산)까지 legacy localStorage(v1) 형식으로 미리 채워두고:
+1. migration 전 수기 계산 총매출 1,380,000 / 정산 552,000 / 정액권 잔액 650,000
+2. `loadTransactions()` 등 첫 호출 시 자동 migration → IndexedDB 거래 3건/정액권 1건/
+   이벤트 4건 확인
+3. migration 후 이번 달 합계 총매출 1,380,000 / 정산 552,000 → **1과 완전 일치**
+4. 정액권 잔액 650,000 → **일치**, 설정 인센티브율 0.4 snapshot 유지 확인
+5. 새로고침(재조회) 후 거래 수 동일
+6. JSON backup → transactions 3 / prepaidPasses 1 / prepaidEvents 4 /
+   monthlyActualPayouts 1, `validateBackup` 통과
+7. 전체 데이터 삭제 → 거래 0 / 정액권 0 / 설정 기본값(40%) 복귀
+8. JSON 파일을 실제 저장/로드하듯 JSON 왕복(stringify→parse) 후 복원
+9. 복원 후 거래 3건 / 정액권 잔액 650,000 / 이번 달 합계 1,380,000·552,000 /
+   인센티브율 0.4 → **migration 직후와 완전히 동일**
+
+dev 서버로 `/`, `/entry`, `/history`, `/settings`, `/settlement`, `/settlement/2026-09-12`,
+`/prepaid`, `/prepaid/new` 전부 200 확인. `/settings`는 IndexedDB 읽기가 클라이언트에서만
+가능해 SSR 시 "불러오는 중..."만 보이는 것이 기존 다른 화면들과 동일한 정상 패턴임을 확인.
+Claude in Chrome이 연결되어 있지 않아 실제 브라우저 클릭 조작 테스트는 하지 못했다.
+
+### NEXT 7 — 모바일 실사용 테스트
 실제 휴대폰에서:
 - 거래 등록
 - 월 합계

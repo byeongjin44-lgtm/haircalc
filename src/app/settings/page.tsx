@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   MaterialCostMode,
   SettlementSettings,
   VatMode,
 } from "@/lib/settlement/types";
-import { loadSettlementSettings, saveSettlementSettings } from "@/lib/settlement/storage";
-import { percentToRate, rateToPercent } from "@/lib/settlement/format";
+import {
+  exportBackup,
+  importBackup,
+  loadSettlementSettings,
+  saveSettlementSettings,
+  validateBackup,
+  wipeAllData,
+} from "@/lib/settlement/storage";
+import { percentToRate, rateToPercent, todayDateString } from "@/lib/settlement/format";
 import {
   MATERIAL_COST_MODES,
   MATERIAL_COST_MODE_LABELS,
@@ -59,14 +66,24 @@ export default function SettingsPage() {
   const [current, setCurrent] = useState<SettlementSettings | null>(null);
   const [form, setForm] = useState<SettingsFormState | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const settings = loadSettlementSettings();
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    (async () => {
+      const settings = await loadSettlementSettings();
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setCurrent(settings);
+      setForm(toFormState(settings));
+    })();
+  }, []);
+
+  async function refreshSettings() {
+    const settings = await loadSettlementSettings();
     setCurrent(settings);
     setForm(toFormState(settings));
-  }, []);
+  }
 
   if (!current || !form) {
     return <p className="text-sm text-zinc-400">불러오는 중...</p>;
@@ -77,7 +94,7 @@ export default function SettingsPage() {
     setSavedMessage(null);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!current || !form) return;
 
     const customerTypeRates: SettlementSettings["customerTypeRates"] = {};
@@ -114,10 +131,72 @@ export default function SettingsPage() {
       updatedAt: new Date().toISOString(),
     };
 
-    saveSettlementSettings(next);
+    await saveSettlementSettings(next);
     setCurrent(next);
     setForm(toFormState(next));
     setSavedMessage("설정이 저장되었습니다.");
+  }
+
+  async function handleExport() {
+    setDataMessage(null);
+    const backup = await exportBackup();
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `haircalc-backup-${todayDateString()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setDataMessage("백업 파일을 내보냈습니다.");
+  }
+
+  function handleImportClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setDataMessage(null);
+
+    let parsed: unknown;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch {
+      setDataMessage("파일을 읽을 수 없습니다. 올바른 JSON 파일인지 확인해주세요.");
+      return;
+    }
+
+    if (!validateBackup(parsed)) {
+      setDataMessage("지원하지 않는 백업 파일입니다 (형식 또는 버전을 확인해주세요).");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "복원하면 현재 저장된 모든 데이터가 이 백업 파일 내용으로 완전히 대체됩니다. 계속하시겠습니까?"
+    );
+    if (!confirmed) return;
+
+    await importBackup(parsed);
+    await refreshSettings();
+    setDataMessage("백업 파일에서 복원했습니다. 다른 화면도 새로고침하면 반영됩니다.");
+  }
+
+  async function handleWipeAll() {
+    const confirmed = window.confirm(
+      "정말 모든 데이터를 삭제하시겠습니까?\n정산 설정, 거래 내역, 정액권, 실제 지급액이 전부 삭제되며 되돌릴 수 없습니다."
+    );
+    if (!confirmed) return;
+
+    await wipeAllData();
+    await refreshSettings();
+    setDataMessage("모든 데이터를 삭제했습니다.");
   }
 
   return (
@@ -267,6 +346,45 @@ export default function SettingsPage() {
       {savedMessage && (
         <p className="text-center text-sm text-zinc-500">{savedMessage}</p>
       )}
+
+      <section className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+        <p className="text-sm font-medium text-zinc-500">데이터 관리</p>
+
+        <button
+          type="button"
+          onClick={handleExport}
+          className="rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
+        >
+          백업 파일 내보내기
+        </button>
+
+        <button
+          type="button"
+          onClick={handleImportClick}
+          className="rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
+        >
+          백업 파일에서 복원
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        <button
+          type="button"
+          onClick={handleWipeAll}
+          className="rounded-xl border border-red-200 py-2.5 text-center text-sm font-semibold text-red-600"
+        >
+          모든 데이터 삭제
+        </button>
+
+        {dataMessage && (
+          <p className="text-center text-sm text-zinc-500">{dataMessage}</p>
+        )}
+      </section>
     </div>
   );
 }

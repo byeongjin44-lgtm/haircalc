@@ -14,15 +14,17 @@ export default function HistoryPage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
 
   useEffect(() => {
-    const loaded = loadTransactions();
-    const sorted = [...loaded].sort((a, b) =>
-      b.date === a.date
-        ? b.createdAt.localeCompare(a.createdAt)
-        : b.date.localeCompare(a.date)
-    );
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTransactions(sorted);
+    (async () => {
+      const loaded = await loadTransactions();
+      const sorted = [...loaded].sort((a, b) =>
+        b.date === a.date
+          ? b.createdAt.localeCompare(a.createdAt)
+          : b.date.localeCompare(a.date)
+      );
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setTransactions(sorted);
+    })();
   }, []);
 
   return (

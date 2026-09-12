@@ -48,9 +48,12 @@ export default function PrepaidNewPage() {
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
 
   useEffect(() => {
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSettings(loadSettlementSettings());
+    (async () => {
+      const loadedSettings = await loadSettlementSettings();
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setSettings(loadedSettings);
+    })();
   }, []);
 
   const [date, setDate] = useState(todayDateString());
@@ -85,7 +88,7 @@ export default function PrepaidNewPage() {
     setMessage(null);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!settings) return;
     if (!isValid) {
       setMessage("실결제금액과 사용가능금액을 입력해주세요.");
@@ -108,7 +111,7 @@ export default function PrepaidNewPage() {
       settings
     );
 
-    recordPrepaidLedgerResult(result);
+    await recordPrepaidLedgerResult(result);
     setMessage(
       `등록 완료 · 매출 반영 ${formatWon(result.event.salesImpact)} · 정산 반영 ${formatWon(
         result.event.settlementImpact

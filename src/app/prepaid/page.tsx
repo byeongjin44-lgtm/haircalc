@@ -14,11 +14,13 @@ export default function PrepaidListPage() {
   const [passes, setPasses] = useState<PrepaidPass[] | null>(null);
 
   useEffect(() => {
-    const loaded = loadPrepaidPasses();
-    const sorted = [...loaded].sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPasses(sorted);
+    (async () => {
+      const loaded = await loadPrepaidPasses();
+      const sorted = [...loaded].sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setPasses(sorted);
+    })();
   }, []);
 
   return (

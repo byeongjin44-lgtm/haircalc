@@ -82,12 +82,16 @@ export default function EntryPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadedSettings = loadSettlementSettings();
-    const loadedPasses = loadPrepaidPasses().filter((p) => p.status === "ACTIVE");
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSettings(loadedSettings);
-    setPrepaidPasses(loadedPasses);
+    (async () => {
+      const [loadedSettings, loadedPasses] = await Promise.all([
+        loadSettlementSettings(),
+        loadPrepaidPasses(),
+      ]);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setSettings(loadedSettings);
+      setPrepaidPasses(loadedPasses.filter((p) => p.status === "ACTIVE"));
+    })();
   }, []);
 
   const isPrepaidPayment = paymentChoice === "PREPAID";
@@ -115,7 +119,7 @@ export default function EntryPage() {
   }
   const prepaidUsePreview = computePrepaidUsePreview();
 
-  function handleSave() {
+  async function handleSave() {
     if (!settings) return;
     if (!isAmountValid) {
       setMessage("금액을 입력해주세요.");
@@ -141,7 +145,7 @@ export default function EntryPage() {
           },
           settings
         );
-        recordPrepaidLedgerResult(result);
+        await recordPrepaidLedgerResult(result);
         setPrepaidPasses((prev) =>
           prev
             .map((p) => (p.id === result.pass.id ? result.pass : p))
@@ -175,7 +179,7 @@ export default function EntryPage() {
       settings
     );
 
-    appendTransaction(transaction);
+    await appendTransaction(transaction);
     setMessage(`저장 완료 · 예상 정산액 ${formatWon(transaction.settlementAmount)}`);
     setAmountText("");
     setMemo("");

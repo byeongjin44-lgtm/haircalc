@@ -1,6 +1,15 @@
-// 로컬 저장 (localStorage) 전용. 서버/외부 DB 없이 브라우저에만 데이터를 유지한다.
+// 저장 계층 (공개 API). UI는 이 파일만 알면 되고, IndexedDB 구현(recordStore.indexeddb.ts)이나
+// 마이그레이션/백업 세부 구현(migration.ts, backup.ts)을 직접 알 필요가 없다.
+//
+// 이전에는 localStorage를 동기로 읽고 썼지만, 이제는 IndexedDB 기반이라 전부 비동기다.
+// 최초 호출 시 legacy localStorage(v1) 데이터를 IndexedDB로 자동 이전한다 (ensureMigrated).
 
 import { createDefaultSettlementSettings } from "./engine.ts";
+import { buildBackup, restoreBackup, type BackupData } from "./backup.ts";
+import { clearLegacyLocalStorage, ensureMigrated } from "./migration.ts";
+import { indexedDbStore } from "./recordStore.indexeddb.ts";
+import { STORE_NAMES } from "./recordStore.ts";
+import type { PrepaidLedgerResult } from "./prepaid.ts";
 import type {
   MonthlyActualPayout,
   PrepaidEvent,
@@ -8,136 +17,120 @@ import type {
   SettlementSettings,
   Transaction,
 } from "./types.ts";
-import type { PrepaidLedgerResult } from "./prepaid.ts";
 
-const SETTINGS_KEY = "haircalc.settlementSettings.v1";
-const TRANSACTIONS_KEY = "haircalc.transactions.v1";
-const MONTHLY_ACTUAL_PAYOUTS_KEY = "haircalc.monthlyActualPayouts.v1";
-const PREPAID_PASSES_KEY = "haircalc.prepaidPasses.v1";
-const PREPAID_EVENTS_KEY = "haircalc.prepaidEvents.v1";
+export type { BackupData } from "./backup.ts";
+export { validateBackup } from "./backup.ts";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-export function loadSettlementSettings(): SettlementSettings {
+/** 첫 호출에서 legacy localStorage -> IndexedDB 마이그레이션을 보장한 뒤 store를 돌려준다. */
+async function ready() {
+  await ensureMigrated(indexedDbStore);
+  return indexedDbStore;
+}
+
+export async function loadSettlementSettings(): Promise<SettlementSettings> {
   if (!isBrowser()) return createDefaultSettlementSettings();
-
-  const raw = window.localStorage.getItem(SETTINGS_KEY);
-  if (!raw) return createDefaultSettlementSettings();
-
-  try {
-    return { ...createDefaultSettlementSettings(), ...JSON.parse(raw) };
-  } catch {
-    return createDefaultSettlementSettings();
-  }
+  const store = await ready();
+  const record = await store.get<SettlementSettings>("settings", "default");
+  return record ?? createDefaultSettlementSettings();
 }
 
-export function saveSettlementSettings(settings: SettlementSettings): void {
+export async function saveSettlementSettings(settings: SettlementSettings): Promise<void> {
   if (!isBrowser()) return;
-  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  const store = await ready();
+  await store.put("settings", settings);
 }
 
-export function loadTransactions(): Transaction[] {
+export async function loadTransactions(): Promise<Transaction[]> {
   if (!isBrowser()) return [];
-
-  const raw = window.localStorage.getItem(TRANSACTIONS_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Transaction[]) : [];
-  } catch {
-    return [];
-  }
+  const store = await ready();
+  return store.getAll<Transaction>("transactions");
 }
 
-export function appendTransaction(transaction: Transaction): Transaction[] {
-  const transactions = [...loadTransactions(), transaction];
-  if (isBrowser()) {
-    window.localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
-  }
-  return transactions;
-}
-
-function loadMonthlyActualPayoutMap(): Record<string, MonthlyActualPayout> {
-  if (!isBrowser()) return {};
-
-  const raw = window.localStorage.getItem(MONTHLY_ACTUAL_PAYOUTS_KEY);
-  if (!raw) return {};
-
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-export function loadMonthlyActualPayout(month: string): MonthlyActualPayout | null {
-  return loadMonthlyActualPayoutMap()[month] ?? null;
-}
-
-export function saveMonthlyActualPayout(month: string, amount: number): void {
+export async function appendTransaction(transaction: Transaction): Promise<void> {
   if (!isBrowser()) return;
-  const map = loadMonthlyActualPayoutMap();
-  map[month] = { month, amount, updatedAt: new Date().toISOString() };
-  window.localStorage.setItem(MONTHLY_ACTUAL_PAYOUTS_KEY, JSON.stringify(map));
+  const store = await ready();
+  await store.put("transactions", transaction);
 }
 
-export function loadPrepaidPasses(): PrepaidPass[] {
+export async function loadMonthlyActualPayout(
+  month: string
+): Promise<MonthlyActualPayout | null> {
+  if (!isBrowser()) return null;
+  const store = await ready();
+  const record = await store.get<MonthlyActualPayout>("monthlyActualPayouts", month);
+  return record ?? null;
+}
+
+export async function loadAllMonthlyActualPayouts(): Promise<MonthlyActualPayout[]> {
   if (!isBrowser()) return [];
-
-  const raw = window.localStorage.getItem(PREPAID_PASSES_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as PrepaidPass[]) : [];
-  } catch {
-    return [];
-  }
+  const store = await ready();
+  return store.getAll<MonthlyActualPayout>("monthlyActualPayouts");
 }
 
-/** id가 같은 정액권이 있으면 갱신하고, 없으면 새로 추가한다 (사용/환불로 잔액이 바뀔 때마다 호출). */
-export function upsertPrepaidPass(pass: PrepaidPass): PrepaidPass[] {
-  const passes = loadPrepaidPasses();
-  const index = passes.findIndex((p) => p.id === pass.id);
-  const next =
-    index >= 0
-      ? passes.map((p, i) => (i === index ? pass : p))
-      : [...passes, pass];
-
-  if (isBrowser()) {
-    window.localStorage.setItem(PREPAID_PASSES_KEY, JSON.stringify(next));
-  }
-  return next;
+export async function saveMonthlyActualPayout(month: string, amount: number): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await store.put<MonthlyActualPayout>("monthlyActualPayouts", {
+    month,
+    amount,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
-export function loadPrepaidEvents(): PrepaidEvent[] {
+export async function loadPrepaidPasses(): Promise<PrepaidPass[]> {
   if (!isBrowser()) return [];
-
-  const raw = window.localStorage.getItem(PREPAID_EVENTS_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as PrepaidEvent[]) : [];
-  } catch {
-    return [];
-  }
+  const store = await ready();
+  return store.getAll<PrepaidPass>("prepaidPasses");
 }
 
-export function appendPrepaidEvent(event: PrepaidEvent): PrepaidEvent[] {
-  const events = [...loadPrepaidEvents(), event];
-  if (isBrowser()) {
-    window.localStorage.setItem(PREPAID_EVENTS_KEY, JSON.stringify(events));
-  }
-  return events;
+export async function upsertPrepaidPass(pass: PrepaidPass): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await store.put("prepaidPasses", pass);
+}
+
+export async function loadPrepaidEvents(): Promise<PrepaidEvent[]> {
+  if (!isBrowser()) return [];
+  const store = await ready();
+  return store.getAll<PrepaidEvent>("prepaidEvents");
+}
+
+export async function appendPrepaidEvent(event: PrepaidEvent): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await store.put("prepaidEvents", event);
 }
 
 /** prepaid.ts의 각 함수가 반환하는 {pass, event}를 그대로 저장한다 (과거 이벤트는 절대 덮어쓰지 않음). */
-export function recordPrepaidLedgerResult(result: PrepaidLedgerResult): void {
-  upsertPrepaidPass(result.pass);
-  appendPrepaidEvent(result.event);
+export async function recordPrepaidLedgerResult(result: PrepaidLedgerResult): Promise<void> {
+  await upsertPrepaidPass(result.pass);
+  await appendPrepaidEvent(result.event);
+}
+
+/** 전체 데이터를 하나의 JSON 백업 객체로 만든다 (/settings의 "백업 파일 내보내기"). */
+export async function exportBackup(): Promise<BackupData> {
+  const store = await ready();
+  return buildBackup(store);
+}
+
+/**
+ * 검증된 백업 데이터로 전체 교체 복원한다 (병합 없음). 호출 전 반드시 validateBackup으로
+ * 확인해야 한다 — 이 함수는 형식이 맞다고 가정하고 바로 덮어쓴다.
+ */
+export async function importBackup(data: BackupData): Promise<void> {
+  const store = await ready();
+  await restoreBackup(store, data);
+}
+
+/** IndexedDB 전체 + 마이그레이션 상태 + legacy localStorage까지 전부 지운다. 되돌릴 수 없다. */
+export async function wipeAllData(): Promise<void> {
+  if (!isBrowser()) return;
+  for (const name of STORE_NAMES) {
+    await indexedDbStore.clear(name);
+  }
+  clearLegacyLocalStorage();
 }

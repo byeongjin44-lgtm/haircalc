@@ -27,14 +27,18 @@ export default function DailyDetailPage() {
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
 
   useEffect(() => {
-    const loadedTransactions = loadTransactions();
-    const loadedPrepaidEvents = loadPrepaidEvents();
-    const loadedPrepaidPasses = loadPrepaidPasses();
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTransactions(loadedTransactions);
-    setPrepaidEvents(loadedPrepaidEvents);
-    setPrepaidPasses(loadedPrepaidPasses);
+    (async () => {
+      const [loadedTransactions, loadedPrepaidEvents, loadedPrepaidPasses] = await Promise.all([
+        loadTransactions(),
+        loadPrepaidEvents(),
+        loadPrepaidPasses(),
+      ]);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setTransactions(loadedTransactions);
+      setPrepaidEvents(loadedPrepaidEvents);
+      setPrepaidPasses(loadedPrepaidPasses);
+    })();
   }, []);
 
   if (!transactions || !prepaidEvents) {

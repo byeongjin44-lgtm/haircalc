@@ -36,20 +36,26 @@ export default function SettlementPage() {
   const [payoutSaved, setPayoutSaved] = useState(false);
 
   useEffect(() => {
-    const loadedTransactions = loadTransactions();
-    const loadedPrepaidEvents = loadPrepaidEvents();
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTransactions(loadedTransactions);
-    setPrepaidEvents(loadedPrepaidEvents);
+    (async () => {
+      const [loadedTransactions, loadedPrepaidEvents] = await Promise.all([
+        loadTransactions(),
+        loadPrepaidEvents(),
+      ]);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setTransactions(loadedTransactions);
+      setPrepaidEvents(loadedPrepaidEvents);
+    })();
   }, []);
 
   useEffect(() => {
-    const saved = loadMonthlyActualPayout(monthKey);
-    // localStorage는 브라우저에서만 접근 가능해 마운트/월 변경 이후에 읽어야 한다.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActualPayoutText(saved ? String(saved.amount) : "");
-    setPayoutSaved(false);
+    (async () => {
+      const saved = await loadMonthlyActualPayout(monthKey);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트/월 변경 이후에 읽어야 한다.
+
+      setActualPayoutText(saved ? String(saved.amount) : "");
+      setPayoutSaved(false);
+    })();
   }, [monthKey]);
 
   const monthTransactions = useMemo(
@@ -80,10 +86,10 @@ export default function SettlementPage() {
     ? actualPayoutAmount! - summary.totalSettlementAmount
     : null;
 
-  function handleSavePayout() {
+  async function handleSavePayout() {
     const amount = Number(actualPayoutText);
     if (!Number.isFinite(amount)) return;
-    saveMonthlyActualPayout(monthKey, amount);
+    await saveMonthlyActualPayout(monthKey, amount);
     setPayoutSaved(true);
   }
 

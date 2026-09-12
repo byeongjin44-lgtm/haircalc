@@ -46,21 +46,27 @@ export default function PrepaidDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadedSettings = loadSettlementSettings();
-    const loadedPass = loadPrepaidPasses().find((p) => p.id === passId) ?? null;
-    const loadedEvents = loadPrepaidEvents()
-      .filter((e) => e.prepaidPassId === passId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    (async () => {
+      const [loadedSettings, loadedPasses, loadedAllEvents] = await Promise.all([
+        loadSettlementSettings(),
+        loadPrepaidPasses(),
+        loadPrepaidEvents(),
+      ]);
+      const loadedPass = loadedPasses.find((p) => p.id === passId) ?? null;
+      const loadedEvents = loadedAllEvents
+        .filter((e) => e.prepaidPassId === passId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-    // localStorage는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSettings(loadedSettings);
-    setPass(loadedPass);
-    setEvents(loadedEvents);
+      // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
+
+      setSettings(loadedSettings);
+      setPass(loadedPass);
+      setEvents(loadedEvents);
+    })();
   }, [passId]);
 
-  function handleSaved(result: PrepaidLedgerResult) {
-    recordPrepaidLedgerResult(result);
+  async function handleSaved(result: PrepaidLedgerResult) {
+    await recordPrepaidLedgerResult(result);
     setPass(result.pass);
     setEvents((prev) => [result.event, ...prev]);
     setActiveAction(null);
@@ -220,7 +226,7 @@ function CreditEventForm({
 }: {
   pass: PrepaidPass;
   compute: (input: PrepaidCreditEventInput) => PrepaidLedgerResult;
-  onSaved: (result: PrepaidLedgerResult) => void;
+  onSaved: (result: PrepaidLedgerResult) => void | Promise<void>;
 }) {
   const [date, setDate] = useState(todayDateString());
   const [amountText, setAmountText] = useState("");
@@ -332,7 +338,7 @@ function AdjustmentForm({
   onSaved,
 }: {
   pass: PrepaidPass;
-  onSaved: (result: PrepaidLedgerResult) => void;
+  onSaved: (result: PrepaidLedgerResult) => void | Promise<void>;
 }) {
   const [date, setDate] = useState(todayDateString());
   const [creditAmountImpactText, setCreditAmountImpactText] = useState("0");
