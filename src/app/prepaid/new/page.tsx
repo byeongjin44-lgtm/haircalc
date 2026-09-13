@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { FieldError, fieldBorderClass } from "@/components/FieldError";
+import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import { purchasePrepaidPass } from "@/lib/settlement/prepaid";
 import {
   BONUS_SETTLEMENT_MODES,
@@ -46,9 +47,17 @@ function ChoiceGroup<T extends string>({
   );
 }
 
+/** 저장 시도 후에만 채워지는 필드별 오류. */
+type PrepaidNewFieldErrors = {
+  date?: string;
+  label?: string;
+  paidAmount?: string;
+  creditAmount?: string;
+};
+
 export default function PrepaidNewPage() {
   const router = useRouter();
-  const { showToast } = useToast();
+  const { showSuccess } = useSuccessOverlay();
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
 
   useEffect(() => {
@@ -70,34 +79,54 @@ export default function PrepaidNewPage() {
   const [bonusSettlementMode, setBonusSettlementMode] =
     useState<BonusSettlementMode>("CREDIT_AMOUNT");
   const [memo, setMemo] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<PrepaidNewFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   const paidAmount = Number(paidAmountText);
   const creditAmount = Number(creditAmountText);
-  const isValid =
-    Number.isFinite(paidAmount) &&
-    paidAmount > 0 &&
-    Number.isFinite(creditAmount) &&
-    creditAmount > 0;
 
   function handlePaidAmountChange(value: string) {
     setPaidAmountText(value);
     if (!creditTouched) setCreditAmountText(value);
-    setMessage(null);
+    setFieldErrors((prev) => ({ ...prev, paidAmount: undefined }));
   }
 
   function handleCreditAmountChange(value: string) {
     setCreditAmountText(value);
     setCreditTouched(true);
-    setMessage(null);
+    setFieldErrors((prev) => ({ ...prev, creditAmount: undefined }));
+  }
+
+  function validatePrepaidNew(): PrepaidNewFieldErrors {
+    const errors: PrepaidNewFieldErrors = {};
+
+    if (!date.trim()) {
+      errors.date = "날짜를 입력해주세요.";
+    }
+    if (!label.trim()) {
+      errors.label = "정액권 식별명을 입력해주세요.";
+    }
+    if (!paidAmountText.trim()) {
+      errors.paidAmount = "실결제금액을 입력해주세요.";
+    } else if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+      errors.paidAmount = "0보다 큰 금액을 입력해주세요.";
+    }
+    if (!creditAmountText.trim()) {
+      errors.creditAmount = "사용가능금액을 입력해주세요.";
+    } else if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+      errors.creditAmount = "0보다 큰 금액을 입력해주세요.";
+    }
+
+    return errors;
   }
 
   async function handleSave() {
     if (!settings) return;
-    if (!isValid) {
-      setMessage("실결제금액과 사용가능금액을 입력해주세요.");
-      return;
-    }
+
+    const errors = validatePrepaidNew();
+    setFieldErrors(errors);
+    setFormError(null);
+    if (Object.keys(errors).length > 0) return;
 
     const now = new Date().toISOString();
     const result = purchasePrepaidPass(
@@ -118,12 +147,12 @@ export default function PrepaidNewPage() {
     try {
       await recordPrepaidLedgerResult(result);
     } catch (e) {
-      // 저장 실패 시에는 성공 토스트/이동 없이 화면에 오류만 남긴다.
-      setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      // 저장 실패 시에는 성공 오버레이/이동 없이 화면에 오류만 남긴다.
+      setFormError(e instanceof Error ? e.message : "저장에 실패했습니다.");
       return;
     }
 
-    showToast("정액권이 등록되었습니다.");
+    showSuccess("정액권이 등록되었습니다.");
     router.push(`/prepaid/${result.pass.id}`);
   }
 
@@ -141,20 +170,28 @@ export default function PrepaidNewPage() {
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            onChange={(e) => {
+              setDate(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, date: undefined }));
+            }}
+            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.date)}`}
           />
+          <FieldError message={fieldErrors.date} />
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm text-zinc-500">정액권 식별명 (선택)</span>
+          <span className="text-sm text-zinc-500">정액권 식별명 *</span>
           <input
             type="text"
             placeholder="예: OO고객 100만원권"
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            onChange={(e) => {
+              setLabel(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, label: undefined }));
+            }}
+            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.label)}`}
           />
+          <FieldError message={fieldErrors.label} />
         </label>
 
         <label className="flex flex-col gap-1">
@@ -166,8 +203,9 @@ export default function PrepaidNewPage() {
             placeholder="0"
             value={paidAmountText}
             onChange={(e) => handlePaidAmountChange(e.target.value)}
-            className="rounded-xl border border-zinc-200 px-4 py-4 text-3xl font-bold tabular-nums"
+            className={`rounded-xl border px-4 py-4 text-3xl font-bold tabular-nums ${fieldBorderClass(!!fieldErrors.paidAmount)}`}
           />
+          <FieldError message={fieldErrors.paidAmount} />
         </label>
 
         <label className="flex flex-col gap-1">
@@ -181,8 +219,9 @@ export default function PrepaidNewPage() {
             placeholder="0"
             value={creditAmountText}
             onChange={(e) => handleCreditAmountChange(e.target.value)}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.creditAmount)}`}
           />
+          <FieldError message={fieldErrors.creditAmount} />
         </label>
 
         <fieldset className="flex flex-col gap-2">
@@ -223,7 +262,11 @@ export default function PrepaidNewPage() {
           등록 저장
         </button>
 
-        {message && <p className="text-center text-sm text-zinc-500">{message}</p>}
+        {formError && (
+          <p className="rounded-lg bg-red-50 p-3 text-center text-sm font-medium text-red-600">
+            {formError}
+          </p>
+        )}
       </div>
     </div>
   );

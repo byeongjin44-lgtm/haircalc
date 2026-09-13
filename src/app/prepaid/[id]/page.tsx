@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { FieldError, fieldBorderClass } from "@/components/FieldError";
+import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import {
   BONUS_SETTLEMENT_MODE_LABELS,
   PREPAID_EVENT_TYPE_LABELS,
@@ -49,7 +50,7 @@ const ACTION_SUCCESS_MESSAGES: Record<ActionType, string> = {
 export default function PrepaidDetailPage() {
   const params = useParams<{ id: string }>();
   const passId = params.id;
-  const { showToast } = useToast();
+  const { showSuccess } = useSuccessOverlay();
 
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
   const [pass, setPass] = useState<PrepaidPass | null | undefined>(undefined);
@@ -90,7 +91,7 @@ export default function PrepaidDetailPage() {
     setPass(result.pass);
     setEvents((prev) => [result.event, ...prev]);
     setActiveAction(null);
-    showToast(ACTION_SUCCESS_MESSAGES[action]);
+    showSuccess(ACTION_SUCCESS_MESSAGES[action]);
   }
 
   if (pass === undefined || !settings) {
@@ -259,6 +260,7 @@ function CreditEventForm({
   const [date, setDate] = useState(todayDateString());
   const [amountText, setAmountText] = useState("");
   const [memo, setMemo] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ date?: string; amount?: string }>({});
   const [error, setError] = useState<string | null>(null);
 
   const amount = Number(amountText);
@@ -274,10 +276,23 @@ function CreditEventForm({
   }, [isValid, amount, date, compute]);
 
   function handleSubmit() {
-    if (!isValid) {
-      setError("사용/환불 금액을 입력해주세요.");
-      return;
+    const errors: { date?: string; amount?: string } = {};
+
+    if (!date.trim()) {
+      errors.date = "날짜를 입력해주세요.";
     }
+    if (!amountText.trim()) {
+      errors.amount = "금액을 입력해주세요.";
+    } else if (!isValid) {
+      errors.amount = "0보다 큰 금액을 입력해주세요.";
+    } else if (amount > pass.remainingBalance) {
+      errors.amount = "정액권 잔액보다 많이 사용할 수 없습니다.";
+    }
+
+    setFieldErrors(errors);
+    setError(null);
+    if (Object.keys(errors).length > 0) return;
+
     try {
       const now = new Date().toISOString();
       const result = compute({
@@ -306,9 +321,13 @@ function CreditEventForm({
         <input
           type="date"
           value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border border-zinc-200 px-3 py-2"
+          onChange={(e) => {
+            setDate(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, date: undefined }));
+          }}
+          className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.date)}`}
         />
+        <FieldError message={fieldErrors.date} />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -321,10 +340,11 @@ function CreditEventForm({
           value={amountText}
           onChange={(e) => {
             setAmountText(e.target.value);
-            setError(null);
+            setFieldErrors((prev) => ({ ...prev, amount: undefined }));
           }}
-          className="rounded-lg border border-zinc-200 px-3 py-3 text-2xl font-semibold"
+          className={`rounded-lg border px-3 py-3 text-2xl font-semibold ${fieldBorderClass(!!fieldErrors.amount)}`}
         />
+        <FieldError message={fieldErrors.amount} />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -380,6 +400,12 @@ function AdjustmentForm({
   const [salesImpactText, setSalesImpactText] = useState("0");
   const [settlementImpactText, setSettlementImpactText] = useState("0");
   const [memo, setMemo] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{
+    date?: string;
+    creditAmountImpact?: string;
+    salesImpact?: string;
+    settlementImpact?: string;
+  }>({});
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit() {
@@ -387,10 +413,34 @@ function AdjustmentForm({
     const salesImpact = Number(salesImpactText);
     const settlementImpact = Number(settlementImpactText);
 
-    if (![creditAmountImpact, salesImpact, settlementImpact].every(Number.isFinite)) {
-      setError("숫자를 정확히 입력해주세요.");
-      return;
+    const errors: {
+      date?: string;
+      creditAmountImpact?: string;
+      salesImpact?: string;
+      settlementImpact?: string;
+    } = {};
+
+    if (!date.trim()) {
+      errors.date = "날짜를 입력해주세요.";
     }
+    if (!creditAmountImpactText.trim() || !Number.isFinite(creditAmountImpact)) {
+      errors.creditAmountImpact = "숫자를 입력해주세요.";
+    } else {
+      const nextBalance = pass.remainingBalance + creditAmountImpact;
+      if (nextBalance < 0 || nextBalance > pass.creditAmount) {
+        errors.creditAmountImpact = "잔액 범위를 벗어나는 조정입니다.";
+      }
+    }
+    if (!salesImpactText.trim() || !Number.isFinite(salesImpact)) {
+      errors.salesImpact = "숫자를 입력해주세요.";
+    }
+    if (!settlementImpactText.trim() || !Number.isFinite(settlementImpact)) {
+      errors.settlementImpact = "숫자를 입력해주세요.";
+    }
+
+    setFieldErrors(errors);
+    setError(null);
+    if (Object.keys(errors).length > 0) return;
 
     try {
       const result = adjustPrepaidPass(pass, {
@@ -420,9 +470,13 @@ function AdjustmentForm({
         <input
           type="date"
           value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border border-zinc-200 px-3 py-2"
+          onChange={(e) => {
+            setDate(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, date: undefined }));
+          }}
+          className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.date)}`}
         />
+        <FieldError message={fieldErrors.date} />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -431,9 +485,13 @@ function AdjustmentForm({
           type="number"
           inputMode="numeric"
           value={creditAmountImpactText}
-          onChange={(e) => setCreditAmountImpactText(e.target.value)}
-          className="rounded-lg border border-zinc-200 px-3 py-2"
+          onChange={(e) => {
+            setCreditAmountImpactText(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, creditAmountImpact: undefined }));
+          }}
+          className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.creditAmountImpact)}`}
         />
+        <FieldError message={fieldErrors.creditAmountImpact} />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -442,9 +500,13 @@ function AdjustmentForm({
           type="number"
           inputMode="numeric"
           value={salesImpactText}
-          onChange={(e) => setSalesImpactText(e.target.value)}
-          className="rounded-lg border border-zinc-200 px-3 py-2"
+          onChange={(e) => {
+            setSalesImpactText(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, salesImpact: undefined }));
+          }}
+          className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.salesImpact)}`}
         />
+        <FieldError message={fieldErrors.salesImpact} />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -453,9 +515,13 @@ function AdjustmentForm({
           type="number"
           inputMode="numeric"
           value={settlementImpactText}
-          onChange={(e) => setSettlementImpactText(e.target.value)}
-          className="rounded-lg border border-zinc-200 px-3 py-2"
+          onChange={(e) => {
+            setSettlementImpactText(e.target.value);
+            setFieldErrors((prev) => ({ ...prev, settlementImpact: undefined }));
+          }}
+          className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.settlementImpact)}`}
         />
+        <FieldError message={fieldErrors.settlementImpact} />
       </label>
 
       <label className="flex flex-col gap-1">

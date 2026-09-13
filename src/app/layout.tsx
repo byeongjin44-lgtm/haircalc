@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
-import { ToastProvider } from "@/components/Toast";
+import { SuccessOverlayProvider } from "@/components/SuccessOverlay";
 import { APP_DESCRIPTION, APP_NAME, APP_THEME_COLOR } from "@/lib/branding";
 
 export const metadata: Metadata = {
@@ -27,12 +27,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className="h-full">
       <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-900 antialiased">
-        <ToastProvider>
+        <SuccessOverlayProvider>
           <main className="mx-auto w-full max-w-md flex-1 px-4 pb-24 pt-4">
             {children}
           </main>
           <BottomNav />
-        </ToastProvider>
+        </SuccessOverlayProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

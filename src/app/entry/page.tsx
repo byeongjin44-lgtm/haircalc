@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { FieldError, fieldBorderClass } from "@/components/FieldError";
+import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import { buildTransactionSnapshot, calculateSettlement } from "@/lib/settlement/engine";
 import { useOwnPrepaidCredit as applyOwnUse } from "@/lib/settlement/prepaid";
 import {
@@ -70,9 +70,18 @@ const PAYMENT_CHOICE_LABELS: Record<PaymentChoice, string> = {
   PREPAID: "정액권",
 };
 
+/** 저장 시도 후에만 채워지는 필드별 오류. 값이 있으면 해당 필드 아래 빨간 문구/빨간 테두리로 표시한다. */
+type EntryFieldErrors = {
+  date?: string;
+  amount?: string;
+  customerType?: string;
+  serviceType?: string;
+  paymentType?: string;
+  prepaidPass?: string;
+};
+
 export default function EntryPage() {
-  const router = useRouter();
-  const { showToast } = useToast();
+  const { showSuccess } = useSuccessOverlay();
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
 
@@ -83,7 +92,8 @@ export default function EntryPage() {
   const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>("CASH");
   const [selectedPassId, setSelectedPassId] = useState("");
   const [memo, setMemo] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<EntryFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -123,20 +133,53 @@ export default function EntryPage() {
   }
   const prepaidUsePreview = computePrepaidUsePreview();
 
+  /** 저장 시도 시점에만 호출한다. 필드별 오류를 계산해 반환하고, 화면에는 setFieldErrors로 반영한다. */
+  function validateEntry(): EntryFieldErrors {
+    const errors: EntryFieldErrors = {};
+
+    if (!date.trim()) {
+      errors.date = "날짜를 입력해주세요.";
+    }
+
+    if (!amountText.trim()) {
+      errors.amount = isPrepaidPayment ? "사용금액을 입력해주세요." : "금액을 입력해주세요.";
+    } else if (!isAmountValid) {
+      errors.amount = "0보다 큰 금액을 입력해주세요.";
+    }
+
+    if (isPrepaidPayment) {
+      if (!selectedPassId) {
+        errors.prepaidPass = "사용할 정액권을 선택해주세요.";
+      } else if (!errors.amount && selectedPass && amount > selectedPass.remainingBalance) {
+        errors.amount = "정액권 잔액보다 많이 사용할 수 없습니다.";
+      }
+    } else {
+      if (!customerType) {
+        errors.customerType = "고객 유형을 선택해주세요.";
+      }
+      if (!serviceType) {
+        errors.serviceType = "시술 유형을 선택해주세요.";
+      }
+      if (!paymentChoice) {
+        errors.paymentType = "결제수단을 선택해주세요.";
+      }
+    }
+
+    return errors;
+  }
+
   async function handleSave() {
     if (!settings) return;
-    if (!isAmountValid) {
-      setMessage("금액을 입력해주세요.");
-      return;
-    }
+
+    const errors = validateEntry();
+    setFieldErrors(errors);
+    setFormError(null);
+    if (Object.keys(errors).length > 0) return;
 
     const now = new Date().toISOString();
 
     if (isPrepaidPayment) {
-      if (!selectedPass) {
-        setMessage("사용할 정액권을 선택해주세요.");
-        return;
-      }
+      if (!selectedPass) return;
       try {
         const result = applyOwnUse(
           selectedPass,
@@ -155,13 +198,12 @@ export default function EntryPage() {
             .map((p) => (p.id === result.pass.id ? result.pass : p))
             .filter((p) => p.status === "ACTIVE")
         );
-        setMessage(null);
         setAmountText("");
         setMemo("");
-        showToast("정액권 사용이 등록되었습니다.");
+        showSuccess("정액권 사용이 등록되었습니다.");
       } catch (e) {
-        // 저장 실패 시에는 성공 토스트를 보여주지 않고 화면에 오류만 남긴다.
-        setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
+        // 저장 실패 시에는 성공 오버레이를 보여주지 않고 화면에 오류만 남긴다.
+        setFormError(e instanceof Error ? e.message : "저장에 실패했습니다.");
       }
       return;
     }
@@ -184,17 +226,14 @@ export default function EntryPage() {
     try {
       await appendTransaction(transaction);
     } catch (e) {
-      // 저장 실패 시에는 성공 토스트를 보여주지 않고 화면에 오류만 남긴다.
-      setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      // 저장 실패 시에는 성공 오버레이를 보여주지 않고 화면에 오류만 남긴다.
+      setFormError(e instanceof Error ? e.message : "저장에 실패했습니다.");
       return;
     }
 
-    setMessage(null);
     setAmountText("");
     setMemo("");
-    showToast("매출이 등록되었습니다.", {
-      action: { label: "내역 보기", onClick: () => router.push("/history") },
-    });
+    showSuccess("매출이 등록되었습니다.");
   }
 
   return (
@@ -212,9 +251,13 @@ export default function EntryPage() {
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            onChange={(e) => {
+              setDate(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, date: undefined }));
+            }}
+            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.date)}`}
           />
+          <FieldError message={fieldErrors.date} />
         </label>
 
         <label className="flex flex-col gap-1">
@@ -229,10 +272,11 @@ export default function EntryPage() {
             value={amountText}
             onChange={(e) => {
               setAmountText(e.target.value);
-              setMessage(null);
+              setFieldErrors((prev) => ({ ...prev, amount: undefined }));
             }}
-            className="rounded-xl border border-zinc-200 px-4 py-4 text-3xl font-bold tabular-nums"
+            className={`rounded-xl border px-4 py-4 text-3xl font-bold tabular-nums ${fieldBorderClass(!!fieldErrors.amount)}`}
           />
+          <FieldError message={fieldErrors.amount} />
         </label>
 
         {!isPrepaidPayment && (
@@ -242,9 +286,13 @@ export default function EntryPage() {
               <ChoiceGroup
                 options={CUSTOMER_TYPES}
                 value={customerType}
-                onChange={setCustomerType}
+                onChange={(value) => {
+                  setCustomerType(value);
+                  setFieldErrors((prev) => ({ ...prev, customerType: undefined }));
+                }}
                 labels={CUSTOMER_TYPE_LABELS}
               />
+              <FieldError message={fieldErrors.customerType} />
             </fieldset>
 
             <fieldset className="flex flex-col gap-2">
@@ -252,9 +300,13 @@ export default function EntryPage() {
               <ChoiceGroup
                 options={SERVICE_TYPES}
                 value={serviceType}
-                onChange={setServiceType}
+                onChange={(value) => {
+                  setServiceType(value);
+                  setFieldErrors((prev) => ({ ...prev, serviceType: undefined }));
+                }}
                 labels={SERVICE_TYPE_LABELS}
               />
+              <FieldError message={fieldErrors.serviceType} />
             </fieldset>
           </>
         )}
@@ -266,10 +318,16 @@ export default function EntryPage() {
             value={paymentChoice}
             onChange={(value) => {
               setPaymentChoice(value);
-              setMessage(null);
+              setFieldErrors((prev) => ({
+                ...prev,
+                paymentType: undefined,
+                prepaidPass: undefined,
+                amount: undefined,
+              }));
             }}
             labels={PAYMENT_CHOICE_LABELS}
           />
+          <FieldError message={fieldErrors.paymentType} />
         </fieldset>
 
         {isPrepaidPayment && (
@@ -290,8 +348,11 @@ export default function EntryPage() {
                   <span className="text-sm text-zinc-500">사용할 정액권</span>
                   <select
                     value={selectedPassId}
-                    onChange={(e) => setSelectedPassId(e.target.value)}
-                    className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
+                    onChange={(e) => {
+                      setSelectedPassId(e.target.value);
+                      setFieldErrors((prev) => ({ ...prev, prepaidPass: undefined }));
+                    }}
+                    className={`min-h-[44px] rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.prepaidPass)}`}
                   >
                     <option value="">선택해주세요</option>
                     {prepaidPasses.map((pass) => (
@@ -301,6 +362,7 @@ export default function EntryPage() {
                       </option>
                     ))}
                   </select>
+                  <FieldError message={fieldErrors.prepaidPass} />
                 </label>
 
                 {selectedPass && (
@@ -379,7 +441,11 @@ export default function EntryPage() {
           저장
         </button>
 
-        {message && <p className="text-center text-sm text-zinc-500">{message}</p>}
+        {formError && (
+          <p className="rounded-lg bg-red-50 p-3 text-center text-sm font-medium text-red-600">
+            {formError}
+          </p>
+        )}
       </div>
     </div>
   );
