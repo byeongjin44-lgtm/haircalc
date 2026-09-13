@@ -368,6 +368,10 @@ export default function SettingsPage() {
 
       <section className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
         <p className="text-sm font-medium text-zinc-500">데이터 관리</p>
+        <p className="text-xs text-zinc-400">
+          데이터는 현재 이 기기에 저장됩니다. 기기 변경이나 브라우저 데이터 삭제 전에
+          백업을 권장합니다.
+        </p>
 
         <button
           type="button"

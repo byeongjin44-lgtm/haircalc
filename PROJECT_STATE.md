@@ -6,7 +6,61 @@
 
 ## 1. 현재 상태
 
-상태: NEXT 1~6 완료 + 모바일 UI/UX 정리 완료 / NEXT 7(모바일 실사용) 전
+상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + **PWA 준비 완료(설치 가능 상태)**
+/ 다음 단계: 실제 배포(Vercel) + 실기기 설치 테스트
+
+**PWA/브랜딩/배포 준비 (2026-09-13)**: settlement/prepaid 계산 엔진, IndexedDB 구조,
+migration, backup/restore, 기존 데이터 모델, 정산 계산식은 전혀 수정하지 않았다.
+새 정산 기능도 추가하지 않았다. 이번 PART은 순수 PWA 설치 가능 상태 + 기본 브랜딩 +
+배포 준비 정리다.
+
+- 앱 이름/설명/색상을 `src/lib/branding.ts` 한 곳에 모았다 — 이름을 바꿀 때 이 파일만
+  고치면 metadata/manifest/아이콘에 전부 반영된다. v0.1 이름은 "헤어정산"
+  (영문 내부 이름 HairCalc), 설명 "헤어 디자이너를 위한 개인 매출·정산 관리".
+- `src/app/manifest.ts` — Next.js App Router의 manifest 파일 컨벤션으로
+  `/manifest.webmanifest`를 자동 생성 (`name`/`short_name`/`description`은
+  branding.ts 참조, `display: "standalone"`, `start_url: "/"`,
+  `theme_color`/`background_color`는 앱 배경(#fafafa)과 통일, `orientation` 강제 없음).
+- 아이콘: `public/icons/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`를
+  **프로젝트 내부 스크립트(`scripts/generate-icons.mjs`)로 직접 생성해 정적 파일로
+  커밋**했다 (요청받은 방식 — 매 요청마다 렌더링하는 라우트 핸들러 대신 한 번 생성해
+  저장소에 둠). 디자인은 zinc-900 배경 + 흰색 굵은 "H" 글자, 복잡한 일러스트나
+  헤어샵 모티프 없이 작은 크기에서도 알아보기 쉬운 placeholder다. 브랜드 색/글자를
+  바꾸려면 `branding.ts` 수정 후 `node scripts/generate-icons.mjs`만 다시 실행하면
+  된다. (처음엔 원화 기호 "₩"를 썼는데 `next/og`가 렌더링을 위해 구글 폰트를
+  원격으로 내려받으려다 네트워크 없는 빌드 환경에서 실패해 ASCII "H"로 바꿨다.)
+  파비콘(`src/app/icon.tsx`, 32×32)과 iOS용 apple-touch-icon
+  (`src/app/apple-icon.tsx`, 180×180)은 Next.js의 동적 아이콘 컨벤션을 그대로 사용
+  (같은 디자인을 `src/lib/appIconMark.tsx`로 공유). 기존 create-next-app 기본
+  favicon.ico(Next.js 로고)는 새 아이콘과 혼동되지 않도록 삭제했다.
+- `metadata`(layout.tsx): title/description을 branding.ts 기준으로 교체,
+  `applicationName`, `appleWebApp`(capable/statusBarStyle/title) 추가. `viewport`에
+  `themeColor` 추가. 불필요한 OG/SEO 메타데이터는 추가하지 않았다.
+- Service Worker: `public/sw.js` — 캐싱 전략 전혀 없이 모든 요청을 네트워크로 그대로
+  전달만 하는 최소 구현(install/activate/fetch 이벤트만 처리). IndexedDB 데이터에
+  영향을 줄 수 있는 오프라인 캐싱/프리캐시는 v0.1에서 도입하지 않았다. 등록은
+  `src/components/ServiceWorkerRegister.tsx`(클라이언트 전용, 등록 실패해도 앱 사용에
+  지장 없음)가 담당하며 `layout.tsx`에 마운트했다.
+- 데이터 안내: `/settings` "데이터 관리" 섹션 상단에 "데이터는 현재 이 기기에
+  저장됩니다. 기기 변경이나 브라우저 데이터 삭제 전에 백업을 권장합니다." 한 줄을
+  추가했다 (팝업 아님, 조용한 안내 텍스트).
+
+검증: `npm run lint` / `npm test`(71개 그대로 통과, 로직 무변경) /
+`npm run build`(typecheck 포함) 모두 통과. 빌드 라우트에
+`/manifest.webmanifest`, `/icon`, `/apple-icon`이 정적으로 추가 생성됨을 확인했고,
+`public/icons/*.png`는 별도 라우트 없이 Next.js의 public 정적 서빙으로 처리된다
+(SSR/빌드 중 IndexedDB를 참조하는 코드는 전혀 추가하지 않아 서버 환경 오류 없음).
+dev 서버(localhost:3000)로 `/`, `/entry`, `/history`, `/settlement`, `/prepaid`,
+`/prepaid/new`, `/more`, `/settings`, `/manifest.webmanifest`,
+`/icons/icon-192.png`, `/icons/icon-512.png`, `/icons/icon-512-maskable.png`,
+`/sw.js` 전부 200 + 올바른 Content-Type(`application/manifest+json`, `image/png`,
+`application/javascript`)을 확인했다. `engine.ts`/`prepaid.ts`/`types.ts`/
+`recordStore.*`/`migration.ts`/`backup.ts`/`storage.ts`는 `git diff` 기준
+완전히 무변경임을 재확인했다.
+
+**남은 배포 단계 (아직 진행하지 않음)**: Vercel 프로젝트 생성/연결, 실제 배포,
+배포된 HTTPS 주소에서 Chrome/Android "홈 화면에 추가" 실제 설치 테스트,
+실기기에서 standalone 실행 확인. 서버/DB 환경변수는 필요 없음(IndexedDB만 사용).
 
 **모바일 UI/UX 정리 (2026-09-13)**: 계산 엔진(`engine.ts`, `prepaid.ts`), IndexedDB
 저장 구조(`recordStore.*`, `migration.ts`, `backup.ts`, `storage.ts`), 데이터 모델

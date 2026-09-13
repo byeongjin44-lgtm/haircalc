@@ -1,16 +1,25 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { APP_DESCRIPTION, APP_NAME, APP_THEME_COLOR } from "@/lib/branding";
 
 export const metadata: Metadata = {
-  title: "헤어 정산 계산기",
-  description: "프리랜서 헤어 디자이너를 위한 월급/정산 계산기",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  applicationName: APP_NAME,
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: APP_NAME,
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: APP_THEME_COLOR,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -21,6 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </main>
         <BottomNav />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
