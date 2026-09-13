@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/Toast";
 import { purchasePrepaidPass } from "@/lib/settlement/prepaid";
 import {
   BONUS_SETTLEMENT_MODES,
@@ -9,7 +11,7 @@ import {
   PREPAID_RECOGNITION_MODES,
   PREPAID_RECOGNITION_MODE_LABELS,
 } from "@/lib/settlement/labels";
-import { formatWon, todayDateString } from "@/lib/settlement/format";
+import { todayDateString } from "@/lib/settlement/format";
 import { loadSettlementSettings, recordPrepaidLedgerResult } from "@/lib/settlement/storage";
 import type { BonusSettlementMode, PrepaidRecognitionMode, SettlementSettings } from "@/lib/settlement/types";
 
@@ -45,6 +47,8 @@ function ChoiceGroup<T extends string>({
 }
 
 export default function PrepaidNewPage() {
+  const router = useRouter();
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
 
   useEffect(() => {
@@ -111,17 +115,16 @@ export default function PrepaidNewPage() {
       settings
     );
 
-    await recordPrepaidLedgerResult(result);
-    setMessage(
-      `등록 완료 · 매출 반영 ${formatWon(result.event.salesImpact)} · 정산 반영 ${formatWon(
-        result.event.settlementImpact
-      )}`
-    );
-    setLabel("");
-    setPaidAmountText("");
-    setCreditAmountText("");
-    setCreditTouched(false);
-    setMemo("");
+    try {
+      await recordPrepaidLedgerResult(result);
+    } catch (e) {
+      // 저장 실패 시에는 성공 토스트/이동 없이 화면에 오류만 남긴다.
+      setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      return;
+    }
+
+    showToast("정액권이 등록되었습니다.");
+    router.push(`/prepaid/${result.pass.id}`);
   }
 
   return (

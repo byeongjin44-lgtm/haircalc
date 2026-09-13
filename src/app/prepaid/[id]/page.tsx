@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/Toast";
 import {
   BONUS_SETTLEMENT_MODE_LABELS,
   PREPAID_EVENT_TYPE_LABELS,
@@ -38,15 +39,23 @@ const ACTION_LABELS: Record<ActionType, string> = {
 /** 환불/조정은 잔액·매출을 되돌리는 위험도가 높은 동작이라 일반 사용과 다른 색으로 구분한다. */
 const RISKY_ACTIONS: readonly ActionType[] = ["REFUND", "ADJUSTMENT"];
 
+const ACTION_SUCCESS_MESSAGES: Record<ActionType, string> = {
+  USE: "정액권 사용이 등록되었습니다.",
+  OTHER_DESIGNER_USE: "타 디자이너 사용이 반영되었습니다.",
+  REFUND: "환불이 반영되었습니다.",
+  ADJUSTMENT: "조정이 반영되었습니다.",
+};
+
 export default function PrepaidDetailPage() {
   const params = useParams<{ id: string }>();
   const passId = params.id;
+  const { showToast } = useToast();
 
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
   const [pass, setPass] = useState<PrepaidPass | null | undefined>(undefined);
   const [events, setEvents] = useState<PrepaidEvent[]>([]);
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -68,16 +77,20 @@ export default function PrepaidDetailPage() {
     })();
   }, [passId]);
 
-  async function handleSaved(result: PrepaidLedgerResult) {
-    await recordPrepaidLedgerResult(result);
+  async function handleSaved(result: PrepaidLedgerResult, action: ActionType) {
+    try {
+      await recordPrepaidLedgerResult(result);
+    } catch (e) {
+      // 저장 실패 시에는 성공 토스트를 보여주지 않고 화면에 오류만 남긴다.
+      setError(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      return;
+    }
+
+    setError(null);
     setPass(result.pass);
     setEvents((prev) => [result.event, ...prev]);
     setActiveAction(null);
-    setMessage(
-      `저장 완료 · 매출 ${formatSignedWon(result.event.salesImpact)} · 정산 ${formatSignedWon(
-        result.event.settlementImpact
-      )}`
-    );
+    showToast(ACTION_SUCCESS_MESSAGES[action]);
   }
 
   if (pass === undefined || !settings) {
@@ -175,29 +188,29 @@ export default function PrepaidDetailPage() {
         <CreditEventForm
           pass={pass}
           compute={(input) => applyOwnUse(pass, input, settings)}
-          onSaved={handleSaved}
+          onSaved={(result) => handleSaved(result, "USE")}
         />
       )}
       {activeAction === "OTHER_DESIGNER_USE" && (
         <CreditEventForm
           pass={pass}
           compute={(input) => applyOtherDesignerUse(pass, input, settings)}
-          onSaved={handleSaved}
+          onSaved={(result) => handleSaved(result, "OTHER_DESIGNER_USE")}
         />
       )}
       {activeAction === "REFUND" && (
         <CreditEventForm
           pass={pass}
           compute={(input) => refundPrepaidCredit(pass, input, settings)}
-          onSaved={handleSaved}
+          onSaved={(result) => handleSaved(result, "REFUND")}
           variant="risky"
         />
       )}
       {activeAction === "ADJUSTMENT" && (
-        <AdjustmentForm pass={pass} onSaved={handleSaved} />
+        <AdjustmentForm pass={pass} onSaved={(result) => handleSaved(result, "ADJUSTMENT")} />
       )}
 
-      {message && <p className="text-center text-sm text-zinc-500">{message}</p>}
+      {error && <p className="text-center text-sm text-red-500">{error}</p>}
 
       <section className="flex flex-col gap-2">
         <p className="text-sm font-medium text-zinc-500">이벤트 이력</p>

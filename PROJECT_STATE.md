@@ -6,10 +6,56 @@
 
 ## 1. 현재 상태
 
-상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + **PWA 준비 완료(설치 가능 상태)**
-/ 다음 단계: 실제 배포(Vercel) + 실기기 설치 테스트
+상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
+**실기기 UX 개선(설치 흐름/저장 피드백) 완료** / 다음 단계: 실제 배포(Vercel) +
+실기기 설치 테스트
 
-**PWA/브랜딩/배포 준비 (2026-09-13)**: settlement/prepaid 계산 엔진, IndexedDB 구조,
+**실기기 UX 개선 (2026-09-13)**: 실기기 배포 테스트에서 발견된 문제 2건만 수정했다.
+계산 엔진(`engine.ts`, `prepaid.ts`), IndexedDB 구조, migration, backup/restore,
+데이터 모델은 전혀 수정하지 않았다.
+
+1. **PWA 설치 UX** — 홈 화면 아이콘 실행 시 standalone이 아니라 일반 Chrome으로
+   열리는 문제. `manifest.ts`에 `id: "/"`, `scope: "/"`를 명시했다(아이콘/색상/이름은
+   유지). `src/components/InstallPwaButton.tsx`(신규)가 `beforeinstallprompt`를
+   가로채 `/more` 상단에 "헤어정산 앱 설치" 버튼을 노출한다 —
+   `window.matchMedia("(display-mode: standalone)")`로 이미 설치된 상태면 버튼을
+   숨기고, `appinstalled` 이벤트 후에도 숨긴다. beforeinstallprompt를 못 받는
+   환경(iOS 등)에서는 버튼 대신 "브라우저 메뉴에서 앱 설치를 선택할 수 있습니다."
+   짧은 안내만 보여준다(깨진 버튼 없음, 복잡한 브라우저별 가이드 없음).
+2. **저장 완료 피드백 부재** — 저장 버튼을 눌러도 화면 변화가 거의 없던 문제.
+   외부 라이브러리 없이 `src/components/Toast.tsx`(신규, Context 기반)로 가벼운
+   Toast/Snackbar를 만들어 `layout.tsx`에 `ToastProvider`로 전역 마운트했다.
+   하단 네비게이션과 겹치지 않게 그 위쪽에 고정 표시, 약 1.8초 후 자동 소멸,
+   `alert()`/큰 모달 없음, 화면 조작을 막지 않는다.
+   - `/entry` 일반 매출 저장 성공 → "매출이 등록되었습니다." 토스트 +
+     [내역 보기] 액션(누르면 `/history`로 이동, 자동 이동 없음). 금액/메모만
+     초기화하고 날짜·고객유형·시술유형·결제수단은 유지해 연속 입력이 편하다.
+   - `/entry` 정액권 결제 저장 성공 → "정액권 사용이 등록되었습니다." 토스트.
+     사용금액 초기화, 선택된 정액권은 유지되어 최신(차감된) 잔액이 바로 보인다.
+     자동 이동 없음.
+   - `/prepaid/new` 등록 성공 → "정액권이 등록되었습니다." 토스트 후
+     생성된 정액권 상세(`/prepaid/[id]`)로 이동 (정액권 등록은 반복 빈도가 낮아
+     이동을 허용).
+   - `/prepaid/[id]`의 [정액권 사용]/[타 디자이너 사용]/[환불]/[조정] 각각 성공 시
+     "정액권 사용이 등록되었습니다." / "타 디자이너 사용이 반영되었습니다." /
+     "환불이 반영되었습니다." / "조정이 반영되었습니다." 토스트로 구분.
+   - 4곳 전부 저장(IndexedDB write)이 실패하면 `catch`에서 성공 토스트/이동 없이
+     화면에 오류 메시지만 남기도록 처리했다 (성공 피드백이 실패 케이스에 새는 경우 없음).
+
+검증: `npm run lint` / `npm test`(기존 71개 그대로 통과, 로직 무변경) /
+`npm run build`(typecheck 포함) 모두 통과. `manifest.webmanifest`에 `id`/`scope`가
+포함됨을 dev 서버로 직접 확인(`{"id":"/","scope":"/",...}`). `engine.ts`/`prepaid.ts`/
+`types.ts`/`recordStore.*`/`migration.ts`/`backup.ts`/`storage.ts`는 `git diff` 기준
+완전히 무변경임을 재확인했다. `beforeinstallprompt`/`appinstalled`/설치 후 버튼 숨김은
+실제 Android Chrome 환경에서만 트리거되는 브라우저 이벤트라 이 세션(서버 환경, 브라우저
+자동화 미연결)에서는 재현할 수 없었다 — 로직은 명세대로 구현했고 실기기 최종 확인이
+필요하다.
+
+---
+
+## 1-1. 이전 PWA/브랜딩/배포 준비 기록 (2026-09-13)
+
+**PWA/브랜딩/배포 준비**: settlement/prepaid 계산 엔진, IndexedDB 구조,
 migration, backup/restore, 기존 데이터 모델, 정산 계산식은 전혀 수정하지 않았다.
 새 정산 기능도 추가하지 않았다. 이번 PART은 순수 PWA 설치 가능 상태 + 기본 브랜딩 +
 배포 준비 정리다.

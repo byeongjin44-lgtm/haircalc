@@ -8,10 +8,12 @@ import {
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: APP_NAME,
     short_name: APP_NAME,
     description: APP_DESCRIPTION,
     start_url: "/",
+    scope: "/",
     display: "standalone",
     background_color: APP_BACKGROUND_COLOR,
     theme_color: APP_THEME_COLOR,

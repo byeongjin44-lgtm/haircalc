@@ -1,4 +1,5 @@
 import Link from "next/link";
+import InstallPwaButton from "@/components/InstallPwaButton";
 
 const MORE_LINKS = [
   { href: "/history", label: "내역", description: "저장된 거래 목록 확인" },
@@ -9,6 +10,10 @@ export default function MorePage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-bold">더보기</h1>
+
+      <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <InstallPwaButton />
+      </div>
 
       <ul className="flex flex-col gap-2">
         {MORE_LINKS.map((item) => (

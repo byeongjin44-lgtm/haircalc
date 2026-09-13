@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/Toast";
 import { buildTransactionSnapshot, calculateSettlement } from "@/lib/settlement/engine";
 import { useOwnPrepaidCredit as applyOwnUse } from "@/lib/settlement/prepaid";
 import {
@@ -69,6 +71,8 @@ const PAYMENT_CHOICE_LABELS: Record<PaymentChoice, string> = {
 };
 
 export default function EntryPage() {
+  const router = useRouter();
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
 
@@ -151,14 +155,12 @@ export default function EntryPage() {
             .map((p) => (p.id === result.pass.id ? result.pass : p))
             .filter((p) => p.status === "ACTIVE")
         );
-        setMessage(
-          `정액권 사용 완료 · 매출 ${formatSignedWon(result.event.salesImpact)} · 정산 ${formatSignedWon(
-            result.event.settlementImpact
-          )}`
-        );
+        setMessage(null);
         setAmountText("");
         setMemo("");
+        showToast("정액권 사용이 등록되었습니다.");
       } catch (e) {
+        // 저장 실패 시에는 성공 토스트를 보여주지 않고 화면에 오류만 남긴다.
         setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
       }
       return;
@@ -179,10 +181,20 @@ export default function EntryPage() {
       settings
     );
 
-    await appendTransaction(transaction);
-    setMessage(`저장 완료 · 예상 정산액 ${formatWon(transaction.settlementAmount)}`);
+    try {
+      await appendTransaction(transaction);
+    } catch (e) {
+      // 저장 실패 시에는 성공 토스트를 보여주지 않고 화면에 오류만 남긴다.
+      setMessage(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      return;
+    }
+
+    setMessage(null);
     setAmountText("");
     setMemo("");
+    showToast("매출이 등록되었습니다.", {
+      action: { label: "내역 보기", onClick: () => router.push("/history") },
+    });
   }
 
   return (
