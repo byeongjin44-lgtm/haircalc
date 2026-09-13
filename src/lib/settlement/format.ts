@@ -10,6 +10,12 @@ export function rateToPercent(rate: number): string {
   return String(Math.round(rate * 100 * 100) / 100);
 }
 
+/** 값이 숫자가 아니면 min으로, 범위를 벗어나면 min/max로 잘라낸다 (폼 레벨 입력 방어용). */
+export function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
 export function formatWon(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}원`;
 }

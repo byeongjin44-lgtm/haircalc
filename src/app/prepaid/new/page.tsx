@@ -31,7 +31,7 @@ function ChoiceGroup<T extends string>({
           key={option}
           type="button"
           onClick={() => onChange(option)}
-          className={`rounded-full border px-3 py-1.5 text-sm ${
+          className={`min-h-[40px] rounded-full border px-4 py-2 text-sm ${
             value === option
               ? "border-zinc-900 bg-zinc-900 text-white"
               : "border-zinc-200 text-zinc-700"
@@ -159,10 +159,11 @@ export default function PrepaidNewPage() {
           <input
             type="number"
             inputMode="numeric"
+            min={0}
             placeholder="0"
             value={paidAmountText}
             onChange={(e) => handlePaidAmountChange(e.target.value)}
-            className="rounded-lg border border-zinc-200 px-3 py-3 text-2xl font-semibold"
+            className="rounded-xl border border-zinc-200 px-4 py-4 text-3xl font-bold tabular-nums"
           />
         </label>
 
@@ -173,6 +174,7 @@ export default function PrepaidNewPage() {
           <input
             type="number"
             inputMode="numeric"
+            min={0}
             placeholder="0"
             value={creditAmountText}
             onChange={(e) => handleCreditAmountChange(e.target.value)}
@@ -213,7 +215,7 @@ export default function PrepaidNewPage() {
         <button
           type="button"
           onClick={handleSave}
-          className="mt-2 rounded-xl bg-zinc-900 py-3 text-center font-semibold text-white"
+          className="mt-2 min-h-[52px] rounded-xl bg-zinc-900 py-4 text-center text-base font-semibold text-white"
         >
           등록 저장
         </button>

@@ -14,7 +14,12 @@ import {
   validateBackup,
   wipeAllData,
 } from "@/lib/settlement/storage";
-import { percentToRate, rateToPercent, todayDateString } from "@/lib/settlement/format";
+import {
+  clampNumber,
+  percentToRate,
+  rateToPercent,
+  todayDateString,
+} from "@/lib/settlement/format";
 import {
   MATERIAL_COST_MODES,
   MATERIAL_COST_MODE_LABELS,
@@ -97,35 +102,37 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!current || !form) return;
 
+    // 폼 레벨 입력 방어: 비율은 0~100%, 고정금액은 0 이상으로 잘라낸다 (엔진은 수정하지 않음).
+    const clampRate = (value: number) => clampNumber(value, 0, 1);
+
     const customerTypeRates: SettlementSettings["customerTypeRates"] = {};
     if (form.newRate.trim() !== "") {
-      customerTypeRates.NEW = percentToRate(form.newRate);
+      customerTypeRates.NEW = clampRate(percentToRate(form.newRate));
     }
     if (form.returningRate.trim() !== "") {
-      customerTypeRates.RETURNING = percentToRate(form.returningRate);
+      customerTypeRates.RETURNING = clampRate(percentToRate(form.returningRate));
     }
     if (form.designatedRate.trim() !== "") {
-      customerTypeRates.DESIGNATED = percentToRate(form.designatedRate);
+      customerTypeRates.DESIGNATED = clampRate(percentToRate(form.designatedRate));
     }
 
     const next: SettlementSettings = {
       ...current,
-      baseIncentiveRate: percentToRate(
-        form.baseIncentiveRate,
-        current.baseIncentiveRate
+      baseIncentiveRate: clampRate(
+        percentToRate(form.baseIncentiveRate, current.baseIncentiveRate)
       ),
       customerTypeRates,
       vatMode: form.vatMode,
       cardFee: {
         enabled: form.cardFeeEnabled,
-        rate: percentToRate(form.cardFeeRate, 0),
+        rate: clampRate(percentToRate(form.cardFeeRate, 0)),
       },
       materialCost: {
         mode: form.materialCostMode,
         value:
           form.materialCostMode === "PERCENT"
-            ? percentToRate(form.materialCostValue, 0)
-            : Number(form.materialCostValue) || 0,
+            ? clampRate(percentToRate(form.materialCostValue, 0))
+            : clampNumber(Number(form.materialCostValue) || 0, 0, Number.MAX_SAFE_INTEGER),
       },
       withholding3_3: form.withholding3_3,
       updatedAt: new Date().toISOString(),
@@ -211,9 +218,11 @@ export default function SettingsPage() {
           <input
             type="number"
             inputMode="decimal"
+            min={0}
+            max={100}
             value={form.baseIncentiveRate}
             onChange={(e) => updateForm({ baseIncentiveRate: e.target.value })}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           />
         </label>
 
@@ -222,9 +231,11 @@ export default function SettingsPage() {
           <input
             type="number"
             inputMode="decimal"
+            min={0}
+            max={100}
             value={form.newRate}
             onChange={(e) => updateForm({ newRate: e.target.value })}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           />
         </label>
 
@@ -233,9 +244,11 @@ export default function SettingsPage() {
           <input
             type="number"
             inputMode="decimal"
+            min={0}
+            max={100}
             value={form.returningRate}
             onChange={(e) => updateForm({ returningRate: e.target.value })}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           />
         </label>
 
@@ -244,9 +257,11 @@ export default function SettingsPage() {
           <input
             type="number"
             inputMode="decimal"
+            min={0}
+            max={100}
             value={form.designatedRate}
             onChange={(e) => updateForm({ designatedRate: e.target.value })}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           />
         </label>
       </section>
@@ -259,7 +274,7 @@ export default function SettingsPage() {
           <select
             value={form.vatMode}
             onChange={(e) => updateForm({ vatMode: e.target.value as VatMode })}
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           >
             {VAT_MODES.map((mode) => (
               <option key={mode} value={mode}>
@@ -285,9 +300,11 @@ export default function SettingsPage() {
             <input
               type="number"
               inputMode="decimal"
+              min={0}
+              max={100}
               value={form.cardFeeRate}
               onChange={(e) => updateForm({ cardFeeRate: e.target.value })}
-              className="rounded-lg border border-zinc-200 px-3 py-2"
+              className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
             />
           </label>
         )}
@@ -299,7 +316,7 @@ export default function SettingsPage() {
             onChange={(e) =>
               updateForm({ materialCostMode: e.target.value as MaterialCostMode })
             }
-            className="rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
           >
             {MATERIAL_COST_MODES.map((mode) => (
               <option key={mode} value={mode}>
@@ -317,9 +334,11 @@ export default function SettingsPage() {
             <input
               type="number"
               inputMode="decimal"
+              min={0}
+              max={form.materialCostMode === "PERCENT" ? 100 : undefined}
               value={form.materialCostValue}
               onChange={(e) => updateForm({ materialCostValue: e.target.value })}
-              className="rounded-lg border border-zinc-200 px-3 py-2"
+              className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
             />
           </label>
         )}
@@ -338,7 +357,7 @@ export default function SettingsPage() {
       <button
         type="button"
         onClick={handleSave}
-        className="rounded-xl bg-zinc-900 py-3 text-center font-semibold text-white"
+        className="min-h-[52px] rounded-xl bg-zinc-900 py-3 text-center text-base font-semibold text-white"
       >
         저장
       </button>
@@ -353,7 +372,7 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleExport}
-          className="rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
+          className="min-h-[48px] rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
         >
           백업 파일 내보내기
         </button>
@@ -361,7 +380,7 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleImportClick}
-          className="rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
+          className="min-h-[48px] rounded-xl border border-zinc-200 py-2.5 text-center text-sm font-semibold"
         >
           백업 파일에서 복원
         </button>
@@ -376,7 +395,7 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleWipeAll}
-          className="rounded-xl border border-red-200 py-2.5 text-center text-sm font-semibold text-red-600"
+          className="min-h-[48px] rounded-xl border border-red-200 py-2.5 text-center text-sm font-semibold text-red-600"
         >
           모든 데이터 삭제
         </button>

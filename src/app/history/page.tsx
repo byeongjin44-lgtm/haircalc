@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   CUSTOMER_TYPE_LABELS,
@@ -36,8 +37,14 @@ export default function HistoryPage() {
       )}
 
       {transactions && transactions.length === 0 && (
-        <div className="rounded-2xl bg-white p-5 text-center text-sm text-zinc-400 shadow-sm">
-          아직 등록된 거래가 없습니다.
+        <div className="flex flex-col items-center gap-4 rounded-2xl bg-white p-8 text-center shadow-sm">
+          <p className="text-sm text-zinc-400">아직 등록된 거래가 없습니다.</p>
+          <Link
+            href="/entry"
+            className="min-h-[48px] rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white"
+          >
+            첫 거래 등록
+          </Link>
         </div>
       )}
 
@@ -45,18 +52,19 @@ export default function HistoryPage() {
         <ul className="flex flex-col gap-2">
           {transactions.map((tx) => (
             <li key={tx.id} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 <span className="text-sm text-zinc-500">{tx.date}</span>
-                <span className="font-semibold">{formatWon(tx.settlementAmount)}</span>
+                <span className="text-lg font-bold tabular-nums">
+                  {formatWon(tx.settlementAmount)}
+                </span>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1 text-xs text-zinc-500">
-                <span>{CUSTOMER_TYPE_LABELS[tx.customerType]}</span>
-                <span>·</span>
+              <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-zinc-500">
                 <span>{SERVICE_TYPE_LABELS[tx.serviceType]}</span>
                 <span>·</span>
-                <span>{PAYMENT_TYPE_LABELS[tx.paymentType]}</span>
+                <span>{CUSTOMER_TYPE_LABELS[tx.customerType]}</span>
                 <span>·</span>
-                <span>결제 {formatWon(tx.amount)}</span>
+                <span>{PAYMENT_TYPE_LABELS[tx.paymentType]}</span>
+                <span className="ml-auto tabular-nums">결제 {formatWon(tx.amount)}</span>
               </div>
               {tx.withholding3_3Applied && (
                 <p className="mt-1 text-xs text-zinc-400">

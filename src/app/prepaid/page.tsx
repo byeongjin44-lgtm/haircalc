@@ -27,7 +27,10 @@ export default function PrepaidListPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">정액권</h1>
-        <Link href="/prepaid/new" className="text-sm text-zinc-500 underline">
+        <Link
+          href="/prepaid/new"
+          className="min-h-[36px] rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-semibold text-white"
+        >
           + 정액권 등록
         </Link>
       </div>
@@ -35,8 +38,14 @@ export default function PrepaidListPage() {
       {!passes && <p className="text-sm text-zinc-400">불러오는 중...</p>}
 
       {passes && passes.length === 0 && (
-        <div className="rounded-2xl bg-white p-5 text-center text-sm text-zinc-400 shadow-sm">
-          등록된 정액권이 없습니다.
+        <div className="flex flex-col items-center gap-4 rounded-2xl bg-white p-8 text-center shadow-sm">
+          <p className="text-sm text-zinc-400">등록된 정액권이 없습니다.</p>
+          <Link
+            href="/prepaid/new"
+            className="min-h-[48px] rounded-xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white"
+          >
+            첫 정액권 등록
+          </Link>
         </div>
       )}
 
@@ -53,28 +62,32 @@ export default function PrepaidListPage() {
                     isEnded ? "bg-zinc-100" : "bg-white"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`font-semibold ${isEnded ? "text-zinc-400" : ""}`}>
-                      {pass.label || `정액권 (${pass.purchaseDate})`}
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`break-all text-xl font-bold tabular-nums ${
+                        isEnded ? "text-zinc-400" : "text-zinc-900"
+                      }`}
+                    >
+                      {formatWon(pass.remainingBalance)}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
                         isEnded ? "bg-zinc-200 text-zinc-500" : "bg-zinc-900 text-white"
                       }`}
                     >
                       {PREPAID_PASS_STATUS_LABELS[pass.status]}
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-zinc-500">
-                    구매일 {pass.purchaseDate} · {PREPAID_RECOGNITION_MODE_LABELS[pass.recognitionMode]}
+                  <div
+                    className={`mt-1 truncate text-sm font-medium ${
+                      isEnded ? "text-zinc-400" : "text-zinc-700"
+                    }`}
+                  >
+                    {pass.label || `정액권 (${pass.purchaseDate})`}
                   </div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-xs text-zinc-500">
-                      실결제 {formatWon(pass.paidAmount)} · 사용가능 {formatWon(pass.creditAmount)}
-                    </span>
-                    <span className={`font-bold ${isEnded ? "text-zinc-400" : ""}`}>
-                      잔액 {formatWon(pass.remainingBalance)}
-                    </span>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    실결제 {formatWon(pass.paidAmount)} · 사용가능 {formatWon(pass.creditAmount)} ·{" "}
+                    {PREPAID_RECOGNITION_MODE_LABELS[pass.recognitionMode]}
                   </div>
                 </Link>
               </li>

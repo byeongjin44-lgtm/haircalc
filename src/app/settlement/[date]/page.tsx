@@ -93,13 +93,13 @@ export default function DailyDetailPage() {
           <ul className="flex flex-col gap-2">
             {dayTransactions.map((tx) => (
               <li key={tx.id} className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                   <span className="text-xs text-zinc-500">
                     {CUSTOMER_TYPE_LABELS[tx.customerType]} ·{" "}
                     {SERVICE_TYPE_LABELS[tx.serviceType]} ·{" "}
                     {PAYMENT_TYPE_LABELS[tx.paymentType]}
                   </span>
-                  <span className="font-semibold">{formatWon(tx.amount)}</span>
+                  <span className="font-semibold tabular-nums">{formatWon(tx.amount)}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-zinc-500">
                   <span>적용 인센티브율 {Math.round(tx.commissionRateSnapshot * 100)}%</span>
@@ -118,11 +118,11 @@ export default function DailyDetailPage() {
           <ul className="flex flex-col gap-2">
             {dayPrepaidEvents.map((event) => (
               <li key={event.id} className="rounded-2xl bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-500">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <span className="truncate text-xs text-zinc-500">
                     {passLabelOf(event)} · {PREPAID_EVENT_TYPE_LABELS[event.type]}
                   </span>
-                  <span className="font-semibold">
+                  <span className="font-semibold tabular-nums">
                     {formatSignedWon(event.salesImpact)}
                   </span>
                 </div>

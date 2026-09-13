@@ -35,6 +35,9 @@ const ACTION_LABELS: Record<ActionType, string> = {
   ADJUSTMENT: "조정",
 };
 
+/** 환불/조정은 잔액·매출을 되돌리는 위험도가 높은 동작이라 일반 사용과 다른 색으로 구분한다. */
+const RISKY_ACTIONS: readonly ActionType[] = ["REFUND", "ADJUSTMENT"];
+
 export default function PrepaidDetailPage() {
   const params = useParams<{ id: string }>();
   const passId = params.id;
@@ -142,20 +145,29 @@ export default function PrepaidDetailPage() {
 
       {isActive && (
         <section className="grid grid-cols-4 gap-2">
-          {(Object.keys(ACTION_LABELS) as ActionType[]).map((action) => (
-            <button
-              key={action}
-              type="button"
-              onClick={() => setActiveAction((prev) => (prev === action ? null : action))}
-              className={`rounded-xl py-2 text-xs font-semibold ${
-                activeAction === action
-                  ? "bg-zinc-900 text-white"
-                  : "bg-white text-zinc-700 shadow-sm"
-              }`}
-            >
-              {ACTION_LABELS[action]}
-            </button>
-          ))}
+          {(Object.keys(ACTION_LABELS) as ActionType[]).map((action) => {
+            const isRisky = RISKY_ACTIONS.includes(action);
+            const isSelected = activeAction === action;
+
+            return (
+              <button
+                key={action}
+                type="button"
+                onClick={() => setActiveAction((prev) => (prev === action ? null : action))}
+                className={`min-h-[44px] rounded-xl py-2 text-xs font-semibold ${
+                  isSelected
+                    ? isRisky
+                      ? "bg-red-600 text-white"
+                      : "bg-zinc-900 text-white"
+                    : isRisky
+                      ? "border border-red-200 bg-white text-red-600"
+                      : "bg-white text-zinc-700 shadow-sm"
+                }`}
+              >
+                {ACTION_LABELS[action]}
+              </button>
+            );
+          })}
         </section>
       )}
 
@@ -178,6 +190,7 @@ export default function PrepaidDetailPage() {
           pass={pass}
           compute={(input) => refundPrepaidCredit(pass, input, settings)}
           onSaved={handleSaved}
+          variant="risky"
         />
       )}
       {activeAction === "ADJUSTMENT" && (
@@ -223,10 +236,12 @@ function CreditEventForm({
   pass,
   compute,
   onSaved,
+  variant = "default",
 }: {
   pass: PrepaidPass;
   compute: (input: PrepaidCreditEventInput) => PrepaidLedgerResult;
   onSaved: (result: PrepaidLedgerResult) => void | Promise<void>;
+  variant?: "default" | "risky";
 }) {
   const [date, setDate] = useState(todayDateString());
   const [amountText, setAmountText] = useState("");
@@ -266,7 +281,11 @@ function CreditEventForm({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+    <div
+      className={`flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm ${
+        variant === "risky" ? "border border-red-200" : ""
+      }`}
+    >
       <p className="text-xs text-zinc-400">현재 잔액 {formatWon(pass.remainingBalance)}</p>
 
       <label className="flex flex-col gap-1">
@@ -284,6 +303,7 @@ function CreditEventForm({
         <input
           type="number"
           inputMode="numeric"
+          min={0}
           placeholder="0"
           value={amountText}
           onChange={(e) => {
@@ -323,7 +343,9 @@ function CreditEventForm({
       <button
         type="button"
         onClick={handleSubmit}
-        className="mt-2 rounded-xl bg-zinc-900 py-3 text-center font-semibold text-white"
+        className={`mt-2 min-h-[48px] rounded-xl py-3 text-center font-semibold text-white ${
+          variant === "risky" ? "bg-red-600" : "bg-zinc-900"
+        }`}
       >
         저장
       </button>
@@ -374,7 +396,7 @@ function AdjustmentForm({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
+    <div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
       <p className="text-xs text-zinc-400">
         자동 계산 없이 값을 직접 입력하는 수동 조정입니다. 잔액을 늘리려면 양수, 줄이려면
         음수를 입력하세요.
@@ -436,7 +458,7 @@ function AdjustmentForm({
       <button
         type="button"
         onClick={handleSubmit}
-        className="mt-2 rounded-xl bg-zinc-900 py-3 text-center font-semibold text-white"
+        className="mt-2 min-h-[48px] rounded-xl bg-red-600 py-3 text-center font-semibold text-white"
       >
         조정 저장
       </button>

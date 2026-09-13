@@ -106,7 +106,7 @@ export default function SettlementPage() {
         <button
           type="button"
           onClick={() => setMonthKey((m) => shiftMonthKey(m, -1))}
-          className="rounded-full px-3 py-1 text-sm text-zinc-500"
+          className="min-h-[40px] rounded-full px-3 py-2 text-sm text-zinc-500 active:bg-zinc-100"
           aria-label="이전 달"
         >
           ← 이전달
@@ -115,7 +115,7 @@ export default function SettlementPage() {
         <button
           type="button"
           onClick={() => setMonthKey((m) => shiftMonthKey(m, 1))}
-          className="rounded-full px-3 py-1 text-sm text-zinc-500"
+          className="min-h-[40px] rounded-full px-3 py-2 text-sm text-zinc-500 active:bg-zinc-100"
           aria-label="다음 달"
         >
           다음달 →
@@ -144,18 +144,19 @@ export default function SettlementPage() {
             <input
               type="number"
               inputMode="numeric"
+              min={0}
               placeholder="미입력"
               value={actualPayoutText}
               onChange={(e) => {
                 setActualPayoutText(e.target.value);
                 setPayoutSaved(false);
               }}
-              className="w-full rounded-lg border border-zinc-200 px-2 py-1 text-sm"
+              className="min-h-[36px] w-full rounded-lg border border-zinc-200 px-2 py-1 text-sm"
             />
             <button
               type="button"
               onClick={handleSavePayout}
-              className="shrink-0 text-xs text-zinc-500 underline"
+              className="min-h-[36px] shrink-0 px-1 text-xs text-zinc-500 underline"
             >
               저장
             </button>
@@ -169,6 +170,15 @@ export default function SettlementPage() {
           </p>
         </div>
       </section>
+
+      {monthTransactions.length === 0 && monthPrepaidEvents.length === 0 && (
+        <p className="text-center text-xs text-zinc-400">
+          이 달에는 등록된 거래가 없어요.{" "}
+          <Link href="/entry" className="underline">
+            거래 등록하기
+          </Link>
+        </p>
+      )}
 
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <p className="mb-3 text-sm font-medium text-zinc-500">월간 달력</p>
@@ -191,13 +201,13 @@ export default function SettlementPage() {
               <Link
                 key={day}
                 href={`/settlement/${dateStr}`}
-                className="flex h-14 flex-col items-center justify-start gap-0.5 rounded-lg border border-zinc-100 py-1 text-zinc-700"
+                className="flex h-14 flex-col items-center justify-start gap-0.5 overflow-hidden rounded-lg border border-zinc-100 bg-white py-1 text-zinc-700 shadow-sm active:bg-zinc-100"
               >
-                <span className="text-[11px]">{day}</span>
-                <span className="text-[10px] text-zinc-400">
+                <span className="text-[11px] font-medium">{day}</span>
+                <span className="max-w-full truncate text-[9px] text-zinc-400">
                   {formatManWon(daySummary.totalAmount)}
                 </span>
-                <span className="text-[10px] text-zinc-500">
+                <span className="max-w-full truncate text-[9px] font-semibold text-zinc-600">
                   {formatManWon(daySummary.totalSettlementAmount)}
                 </span>
               </Link>

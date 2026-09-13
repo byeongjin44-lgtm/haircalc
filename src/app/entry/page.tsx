@@ -45,7 +45,7 @@ function ChoiceGroup<T extends string>({
           key={option}
           type="button"
           onClick={() => onChange(option)}
-          className={`rounded-full border px-3 py-1.5 text-sm ${
+          className={`min-h-[40px] rounded-full border px-4 py-2 text-sm ${
             value === option
               ? "border-zinc-900 bg-zinc-900 text-white"
               : "border-zinc-200 text-zinc-700"
@@ -212,13 +212,14 @@ export default function EntryPage() {
           <input
             type="number"
             inputMode="numeric"
+            min={0}
             placeholder="0"
             value={amountText}
             onChange={(e) => {
               setAmountText(e.target.value);
               setMessage(null);
             }}
-            className="rounded-lg border border-zinc-200 px-3 py-3 text-2xl font-semibold"
+            className="rounded-xl border border-zinc-200 px-4 py-4 text-3xl font-bold tabular-nums"
           />
         </label>
 
@@ -260,7 +261,10 @@ export default function EntryPage() {
         </fieldset>
 
         {isPrepaidPayment && (
-          <div className="flex flex-col gap-3 rounded-xl bg-zinc-50 p-4">
+          <div className="flex flex-col gap-3 rounded-xl border-l-4 border-zinc-900 bg-zinc-50 p-4">
+            <p className="text-xs font-semibold text-zinc-500">
+              정액권 결제 · 보유 중인 정액권의 잔액에서 차감됩니다
+            </p>
             {prepaidPasses.length === 0 ? (
               <p className="text-sm text-zinc-500">
                 사용 가능한 정액권이 없습니다.{" "}
@@ -271,11 +275,11 @@ export default function EntryPage() {
             ) : (
               <>
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm text-zinc-500">보유 정액권 선택</span>
+                  <span className="text-sm text-zinc-500">사용할 정액권</span>
                   <select
                     value={selectedPassId}
                     onChange={(e) => setSelectedPassId(e.target.value)}
-                    className="rounded-lg border border-zinc-200 px-3 py-2"
+                    className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
                   >
                     <option value="">선택해주세요</option>
                     {prepaidPasses.map((pass) => (
@@ -322,9 +326,11 @@ export default function EntryPage() {
               </span>
               <span>{formatWon(transactionPreview.settlementAmount)}</span>
             </p>
-            <p className="mt-1 flex justify-between border-t border-zinc-200 pt-1 font-semibold">
-              <span>예상 정산액</span>
-              <span>{formatWon(transactionPreview.settlementAmount)}</span>
+            <p className="mt-1 flex items-center justify-between border-t border-zinc-200 pt-1">
+              <span className="font-semibold">예상 정산액</span>
+              <span className="text-lg font-bold">
+                {formatWon(transactionPreview.settlementAmount)}
+              </span>
             </p>
             {transactionPreview.withholding3_3Applied && (
               <p className="flex justify-between text-zinc-500">
@@ -341,9 +347,11 @@ export default function EntryPage() {
               <span className="text-zinc-500">정산 반영 매출</span>
               <span>{formatSignedWon(prepaidUsePreview.event.salesImpact)}</span>
             </p>
-            <p className="mt-1 flex justify-between font-semibold">
-              <span>정산 영향</span>
-              <span>{formatSignedWon(prepaidUsePreview.event.settlementImpact)}</span>
+            <p className="mt-1 flex items-center justify-between">
+              <span className="font-semibold">정산 영향</span>
+              <span className="text-lg font-bold">
+                {formatSignedWon(prepaidUsePreview.event.settlementImpact)}
+              </span>
             </p>
             <p className="mt-1 text-xs text-zinc-400">
               사용 후 잔액 {formatWon(prepaidUsePreview.pass.remainingBalance)}
@@ -354,7 +362,7 @@ export default function EntryPage() {
         <button
           type="button"
           onClick={handleSave}
-          className="mt-2 rounded-xl bg-zinc-900 py-3 text-center font-semibold text-white"
+          className="mt-2 min-h-[52px] rounded-xl bg-zinc-900 py-4 text-center text-base font-semibold text-white"
         >
           저장
         </button>
