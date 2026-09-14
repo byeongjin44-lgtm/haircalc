@@ -107,6 +107,13 @@ export type PrepaidRecognitionMode = "SALE_IMMEDIATE" | "USE_BASED";
  */
 export type BonusSettlementMode = "CREDIT_AMOUNT" | "PAID_RATIO";
 
+/**
+ * 정액권 사용 할인이 있을 때 디자이너 매출 인정 기준.
+ * DISCOUNTED_AMOUNT: 정액권에서 실제 차감된(할인 후) 금액을 매출 기준으로 사용.
+ * ORIGINAL_SERVICE_AMOUNT: 고객에게는 할인이 적용되지만 매출은 원래 시술가 기준으로 계산.
+ */
+export type PrepaidDiscountSettlementBasis = "DISCOUNTED_AMOUNT" | "ORIGINAL_SERVICE_AMOUNT";
+
 export type PrepaidPassStatus = "ACTIVE" | "DEPLETED" | "CLOSED";
 
 export interface PrepaidPass {
@@ -119,6 +126,14 @@ export interface PrepaidPass {
   remainingBalance: number;
   recognitionMode: PrepaidRecognitionMode;
   bonusSettlementMode: BonusSettlementMode;
+  /**
+   * 정액권 사용 시 시술가 할인율 (0~1, 1 미만). 이 기능 이전에 만들어진 정액권은 이 필드가
+   * 아예 없다 — 없으면 0%(할인 없음)로 취급해야 하며, 값을 읽는 쪽은 반드시
+   * `resolveDiscountRate()`(prepaid.ts)를 거쳐 undefined를 직접 다루지 않는다.
+   */
+  discountRate?: number;
+  /** 할인 적용 시 매출 인정 기준. 없으면 DISCOUNTED_AMOUNT로 취급(`resolveDiscountSettlementBasis()`). */
+  discountSettlementBasis?: PrepaidDiscountSettlementBasis;
   status: PrepaidPassStatus;
   label?: string;
   memo?: string;
@@ -149,6 +164,14 @@ export interface PrepaidEvent {
   settlementImpact: number;
   /** 이벤트 생성 당시 적용된 인센티브율 snapshot. ADJUSTMENT처럼 자동 계산이 없는 이벤트는 비워둔다. */
   commissionRateSnapshot?: number;
+  /**
+   * 정액권 할인이 적용된 "본인 사용"(USE) 이벤트에서만 채워지는 snapshot — 할인 없는
+   * 사용/타 이벤트 타입은 비워둔다. 이후 정액권의 discountRate가 바뀌어도 이미 만든
+   * 이벤트의 salesImpact/settlementImpact는 이 snapshot 그대로 유지된다(재계산 없음).
+   */
+  serviceAmountSnapshot?: number;
+  discountRateSnapshot?: number;
+  discountSettlementBasisSnapshot?: PrepaidDiscountSettlementBasis;
   memo?: string;
   createdAt: string;
 }

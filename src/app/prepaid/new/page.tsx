@@ -5,16 +5,23 @@ import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
-import { purchasePrepaidPass } from "@/lib/settlement/prepaid";
+import { calculateDiscountedServiceAmount, purchasePrepaidPass } from "@/lib/settlement/prepaid";
 import {
   BONUS_SETTLEMENT_MODES,
   BONUS_SETTLEMENT_MODE_LABELS,
+  PREPAID_DISCOUNT_SETTLEMENT_BASES,
+  PREPAID_DISCOUNT_SETTLEMENT_BASIS_LABELS,
   PREPAID_RECOGNITION_MODES,
   PREPAID_RECOGNITION_MODE_LABELS,
 } from "@/lib/settlement/labels";
-import { applyBonusRate, todayDateString } from "@/lib/settlement/format";
+import { applyBonusRate, formatWon, percentToRate, todayDateString } from "@/lib/settlement/format";
 import { loadSettlementSettings, recordPrepaidLedgerResult } from "@/lib/settlement/storage";
-import type { BonusSettlementMode, PrepaidRecognitionMode, SettlementSettings } from "@/lib/settlement/types";
+import type {
+  BonusSettlementMode,
+  PrepaidDiscountSettlementBasis,
+  PrepaidRecognitionMode,
+  SettlementSettings,
+} from "@/lib/settlement/types";
 
 function ChoiceGroup<T extends string>({
   options,
@@ -57,12 +64,16 @@ const BONUS_RATE_OPTIONS: readonly { rate: number; label: string }[] = [
   { rate: 0.3, label: "+30%" },
 ];
 
+/** 정액권 사용 할인율 빠른 선택. 0이면 "없음", 그 외는 숫자 입력창에 직접 값을 넣어도 된다. */
+const DISCOUNT_RATE_QUICK_OPTIONS: readonly number[] = [0, 5, 10, 15, 20];
+
 /** 저장 시도 후에만 채워지는 필드별 오류. */
 type PrepaidNewFieldErrors = {
   date?: string;
   label?: string;
   paidAmount?: string;
   creditAmount?: string;
+  discountRate?: string;
 };
 
 /**
@@ -78,6 +89,8 @@ const INITIAL_PREPAID_NEW_FORM = {
   bonusRateText: "0",
   recognitionMode: "SALE_IMMEDIATE" as PrepaidRecognitionMode,
   bonusSettlementMode: "CREDIT_AMOUNT" as BonusSettlementMode,
+  discountRateText: "0",
+  discountSettlementBasis: "DISCOUNTED_AMOUNT" as PrepaidDiscountSettlementBasis,
   memo: "",
 };
 
@@ -109,6 +122,11 @@ export default function PrepaidNewPage() {
   const [bonusSettlementMode, setBonusSettlementMode] = useState<BonusSettlementMode>(
     INITIAL_PREPAID_NEW_FORM.bonusSettlementMode
   );
+  const [discountRateText, setDiscountRateText] = useState(
+    INITIAL_PREPAID_NEW_FORM.discountRateText
+  );
+  const [discountSettlementBasis, setDiscountSettlementBasis] =
+    useState<PrepaidDiscountSettlementBasis>(INITIAL_PREPAID_NEW_FORM.discountSettlementBasis);
   const [memo, setMemo] = useState(INITIAL_PREPAID_NEW_FORM.memo);
   const [fieldErrors, setFieldErrors] = useState<PrepaidNewFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -123,6 +141,8 @@ export default function PrepaidNewPage() {
     setBonusRateText(INITIAL_PREPAID_NEW_FORM.bonusRateText);
     setRecognitionMode(INITIAL_PREPAID_NEW_FORM.recognitionMode);
     setBonusSettlementMode(INITIAL_PREPAID_NEW_FORM.bonusSettlementMode);
+    setDiscountRateText(INITIAL_PREPAID_NEW_FORM.discountRateText);
+    setDiscountSettlementBasis(INITIAL_PREPAID_NEW_FORM.discountSettlementBasis);
     setMemo(INITIAL_PREPAID_NEW_FORM.memo);
     setFieldErrors({});
     setFormError(null);
@@ -140,6 +160,11 @@ export default function PrepaidNewPage() {
 
   const paidAmount = Number(paidAmountText);
   const creditAmount = Number(creditAmountText);
+  const discountRatePercent = Number(discountRateText);
+  const isDiscountRateValid =
+    Number.isFinite(discountRatePercent) && discountRatePercent >= 0 && discountRatePercent < 100;
+  const discountRate = isDiscountRateValid ? percentToRate(discountRateText) : 0;
+  const hasDiscount = isDiscountRateValid && discountRate > 0;
 
   function handlePaidAmountChange(value: string) {
     setPaidAmountText(value);
@@ -182,6 +207,9 @@ export default function PrepaidNewPage() {
     } else if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
       errors.creditAmount = "0보다 큰 금액을 입력해주세요.";
     }
+    if (!isDiscountRateValid) {
+      errors.discountRate = "0 이상 100 미만의 할인율을 입력해주세요.";
+    }
 
     return errors;
   }
@@ -203,6 +231,8 @@ export default function PrepaidNewPage() {
         creditAmount,
         recognitionMode,
         bonusSettlementMode,
+        discountRate,
+        discountSettlementBasis,
         label: label.trim() || undefined,
         memo: memo.trim() || undefined,
         createdAt: now,
@@ -338,6 +368,72 @@ export default function PrepaidNewPage() {
             </p>
           </div>
         </fieldset>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm text-zinc-500">정액권 사용 할인율 (%)</span>
+          <div className="flex flex-wrap gap-2">
+            {DISCOUNT_RATE_QUICK_OPTIONS.map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => {
+                  setDiscountRateText(String(pct));
+                  setFieldErrors((prev) => ({ ...prev, discountRate: undefined }));
+                }}
+                className={`min-h-[40px] rounded-full border px-4 py-2 text-sm ${
+                  discountRateText === String(pct)
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-200 text-zinc-700"
+                }`}
+              >
+                {pct === 0 ? "없음" : `${pct}%`}
+              </button>
+            ))}
+          </div>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={99}
+            placeholder="직접 입력"
+            value={discountRateText}
+            onChange={(e) => {
+              setDiscountRateText(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, discountRate: undefined }));
+            }}
+            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.discountRate)}`}
+          />
+          <FieldError message={fieldErrors.discountRate} />
+        </label>
+
+        {hasDiscount && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm text-zinc-500">할인 정산 기준</legend>
+            <ChoiceGroup
+              options={PREPAID_DISCOUNT_SETTLEMENT_BASES}
+              value={discountSettlementBasis}
+              onChange={setDiscountSettlementBasis}
+              labels={PREPAID_DISCOUNT_SETTLEMENT_BASIS_LABELS}
+            />
+            <div className="rounded-xl bg-zinc-50 p-3 text-xs text-zinc-500">
+              <p>
+                <span className="font-semibold text-zinc-700">할인 후 금액 기준</span> —
+                정액권에서 실제 차감된 금액을 매출 기준으로 사용합니다.
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-zinc-700">정상 시술가 기준</span> — 고객에게
+                할인은 적용하지만 디자이너 매출은 원래 시술가 기준으로 계산합니다.
+              </p>
+              <p className="mt-1">
+                예) 정상가 100,000원 · 할인 {discountRatePercent}% → 정액권{" "}
+                {formatWon(calculateDiscountedServiceAmount(100000, discountRate))} 차감
+                (동일) · 매출 기준은 할인 후 금액 기준{" "}
+                {formatWon(calculateDiscountedServiceAmount(100000, discountRate))} vs 정상
+                시술가 기준 {formatWon(100000)}
+              </p>
+            </div>
+          </fieldset>
+        )}
 
         <label className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">메모 (선택)</span>

@@ -5,7 +5,11 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import { buildTransactionSnapshot, calculateSettlement } from "@/lib/settlement/engine";
-import { useOwnPrepaidCredit as applyOwnUse } from "@/lib/settlement/prepaid";
+import {
+  calculateDiscountedServiceAmount,
+  resolveDiscountRate,
+  useOwnPrepaidCredit as applyOwnUse,
+} from "@/lib/settlement/prepaid";
 import {
   CUSTOMER_TYPES,
   CUSTOMER_TYPE_LABELS,
@@ -155,6 +159,13 @@ export default function EntryPage() {
   const amount = Number(amountText);
   const isAmountValid = Number.isFinite(amount) && amount > 0;
 
+  // 선택한 정액권에 사용 할인율이 있으면 입력값은 "정상 시술가"이고, 정액권에서는
+  // 할인이 적용된 금액만 차감된다. 할인이 없으면 입력값이 곧 차감액(기존 동작 그대로).
+  const passDiscountRate = selectedPass ? resolveDiscountRate(selectedPass) : 0;
+  const hasDiscount = isPrepaidPayment && passDiscountRate > 0;
+  const discountedAmount =
+    hasDiscount && isAmountValid ? calculateDiscountedServiceAmount(amount, passDiscountRate) : amount;
+
   const transactionPreview = useMemo(() => {
     if (!settings || isPrepaidPayment || !isAmountValid) return null;
     return calculateSettlement(amount, customerType, paymentChoice as PaymentType, settings);
@@ -165,7 +176,13 @@ export default function EntryPage() {
     try {
       return applyOwnUse(
         selectedPass,
-        { id: "preview", date, creditAmount: amount, createdAt: new Date().toISOString() },
+        {
+          id: "preview",
+          date,
+          creditAmount: discountedAmount,
+          serviceAmount: hasDiscount ? amount : undefined,
+          createdAt: new Date().toISOString(),
+        },
         settings
       );
     } catch {
@@ -191,7 +208,9 @@ export default function EntryPage() {
     if (isPrepaidPayment) {
       if (!selectedPassId) {
         errors.prepaidPass = "사용할 정액권을 선택해주세요.";
-      } else if (!errors.amount && selectedPass && amount > selectedPass.remainingBalance) {
+      } else if (!errors.amount && selectedPass && discountedAmount <= 0) {
+        errors.amount = "차감 금액이 0원 이하입니다. 시술가를 확인해주세요.";
+      } else if (!errors.amount && selectedPass && discountedAmount > selectedPass.remainingBalance) {
         errors.amount = "정액권 잔액보다 많이 사용할 수 없습니다.";
       }
     } else {
@@ -227,7 +246,8 @@ export default function EntryPage() {
           {
             id: crypto.randomUUID(),
             date,
-            creditAmount: amount,
+            creditAmount: discountedAmount,
+            serviceAmount: hasDiscount ? amount : undefined,
             memo: memo.trim() || undefined,
             createdAt: now,
           },
@@ -303,7 +323,7 @@ export default function EntryPage() {
 
         <label className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">
-            {isPrepaidPayment ? "사용금액" : "결제/시술 금액"}
+            {isPrepaidPayment ? (hasDiscount ? "정상 시술가" : "사용금액") : "결제/시술 금액"}
           </span>
           <input
             type="number"
@@ -318,6 +338,12 @@ export default function EntryPage() {
             className={`rounded-xl border px-4 py-4 text-3xl font-bold tabular-nums ${fieldBorderClass(!!fieldErrors.amount)}`}
           />
           <FieldError message={fieldErrors.amount} />
+          {hasDiscount && isAmountValid && (
+            <p className="mt-1 text-xs text-zinc-500">
+              정액권 할인 {Math.round(passDiscountRate * 100)}% → 실제 차감{" "}
+              <span className="font-semibold text-zinc-900">{formatWon(discountedAmount)}</span>
+            </p>
+          )}
         </label>
 
         {!isPrepaidPayment && (

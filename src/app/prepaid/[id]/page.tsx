@@ -7,6 +7,7 @@ import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import {
   BONUS_SETTLEMENT_MODE_LABELS,
+  PREPAID_DISCOUNT_SETTLEMENT_BASIS_LABELS,
   PREPAID_EVENT_TYPE_LABELS,
   PREPAID_PASS_STATUS_LABELS,
   PREPAID_RECOGNITION_MODE_LABELS,
@@ -15,6 +16,8 @@ import { formatSignedWon, formatWon, todayDateString } from "@/lib/settlement/fo
 import {
   adjustPrepaidPass,
   refundPrepaidCredit,
+  resolveDiscountRate,
+  resolveDiscountSettlementBasis,
   useByOtherDesigner as applyOtherDesignerUse,
   useOwnPrepaidCredit as applyOwnUse,
   type PrepaidCreditEventInput,
@@ -175,6 +178,15 @@ export default function PrepaidDetailPage() {
               보너스: {BONUS_SETTLEMENT_MODE_LABELS[pass.bonusSettlementMode]}
             </p>
           </div>
+          {resolveDiscountRate(pass) > 0 && (
+            <div>
+              <p className="text-xs text-zinc-500">정액권 할인</p>
+              <p className="font-semibold">{Math.round(resolveDiscountRate(pass) * 100)}%</p>
+              <p className="text-xs text-zinc-400">
+                정산 기준: {PREPAID_DISCOUNT_SETTLEMENT_BASIS_LABELS[resolveDiscountSettlementBasis(pass)]}
+              </p>
+            </div>
+          )}
         </div>
         {pass.memo && <p className="mt-3 text-xs text-zinc-400">{pass.memo}</p>}
       </section>

@@ -3,6 +3,7 @@ import type {
   CustomerType,
   MaterialCostMode,
   PaymentType,
+  PrepaidDiscountSettlementBasis,
   PrepaidEventType,
   PrepaidPassStatus,
   PrepaidRecognitionMode,
@@ -102,6 +103,20 @@ export const PREPAID_RECOGNITION_MODE_LABELS: Record<PrepaidRecognitionMode, str
 export const BONUS_SETTLEMENT_MODE_LABELS: Record<BonusSettlementMode, string> = {
   CREDIT_AMOUNT: "차감금액 기준",
   PAID_RATIO: "실결제 비율 환산",
+};
+
+/** 화면 표시 순서. 기본값(DISCOUNTED_AMOUNT)은 이 순서와 무관하게 유지된다. */
+export const PREPAID_DISCOUNT_SETTLEMENT_BASES: readonly PrepaidDiscountSettlementBasis[] = [
+  "DISCOUNTED_AMOUNT",
+  "ORIGINAL_SERVICE_AMOUNT",
+];
+
+export const PREPAID_DISCOUNT_SETTLEMENT_BASIS_LABELS: Record<
+  PrepaidDiscountSettlementBasis,
+  string
+> = {
+  DISCOUNTED_AMOUNT: "할인 후 금액 기준",
+  ORIGINAL_SERVICE_AMOUNT: "정상 시술가 기준",
 };
 
 export const PREPAID_EVENT_TYPE_LABELS: Record<PrepaidEventType, string> = {

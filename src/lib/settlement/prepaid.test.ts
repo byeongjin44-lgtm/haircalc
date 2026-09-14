@@ -4,10 +4,13 @@ import { createDefaultSettlementSettings } from "./engine.ts";
 import {
   adjustPrepaidPass,
   calculateBalanceFromEvents,
+  calculateDiscountedServiceAmount,
   closePrepaidPass,
   convertCreditToSalesAmount,
   purchasePrepaidPass,
   refundPrepaidCredit,
+  resolveDiscountRate,
+  resolveDiscountSettlementBasis,
   useByOtherDesigner,
   useOwnPrepaidCredit,
   type CreatePrepaidPassInput,
@@ -435,6 +438,232 @@ describe("잔액 무결성 - 추가 가드", () => {
         settlementImpact: 0,
         createdAt: NOW,
       })
+    );
+  });
+});
+
+describe("16. 정액권 사용 할인", () => {
+  test("A. 정상 시술가 100000 / 할인 10% -> 차감 90000", () => {
+    assert.equal(calculateDiscountedServiceAmount(100_000, 0.1), 90_000);
+  });
+
+  test("B. 할인 0% -> 기존 USE_BASED 본인 사용과 동일하게 동작한다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const { pass } = purchasePrepaidPass(
+      purchaseInput({ recognitionMode: "USE_BASED", discountRate: 0 }),
+      settings
+    );
+
+    const result = useOwnPrepaidCredit(
+      pass,
+      { id: "evt-16b", date: "2026-09-13", creditAmount: 200_000, createdAt: NOW },
+      settings
+    );
+
+    assert.equal(result.event.salesImpact, 200_000);
+    assert.equal(result.event.settlementImpact, 80_000);
+  });
+
+  test("E. 기존(할인 필드 없는) PrepaidPass는 0%처럼 정상 처리된다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    // discountRate/discountSettlementBasis를 아예 넘기지 않아, 이 기능 이전에 저장된
+    // 정액권(필드 자체가 없는 레코드)을 그대로 흉내낸다.
+    const { pass } = purchasePrepaidPass(purchaseInput({ recognitionMode: "USE_BASED" }), settings);
+
+    assert.equal(resolveDiscountRate(pass), 0);
+    assert.equal(resolveDiscountSettlementBasis(pass), "DISCOUNTED_AMOUNT");
+
+    const result = useOwnPrepaidCredit(
+      pass,
+      { id: "evt-16e", date: "2026-09-13", creditAmount: 200_000, createdAt: NOW },
+      settings
+    );
+
+    assert.equal(result.event.salesImpact, 200_000);
+    assert.equal(result.event.settlementImpact, 80_000);
+  });
+
+  test("C/G. USE_BASED + 할인 후 금액 기준 -> 매출/정산이 할인된 차감액 기준으로 계산된다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const { pass } = purchasePrepaidPass(
+      purchaseInput({
+        recognitionMode: "USE_BASED",
+        paidAmount: 100_000,
+        creditAmount: 100_000,
+        bonusSettlementMode: "CREDIT_AMOUNT",
+        discountRate: 0.1,
+        discountSettlementBasis: "DISCOUNTED_AMOUNT",
+      }),
+      settings
+    );
+
+    const discountedAmount = calculateDiscountedServiceAmount(100_000, 0.1);
+    const result = useOwnPrepaidCredit(
+      pass,
+      {
+        id: "evt-16c",
+        date: "2026-09-13",
+        creditAmount: discountedAmount,
+        serviceAmount: 100_000,
+        createdAt: NOW,
+      },
+      settings
+    );
+
+    assert.equal(discountedAmount, 90_000);
+    assert.equal(result.event.creditAmountImpact, -90_000);
+    assert.equal(result.event.salesImpact, 90_000);
+    assert.equal(result.event.settlementImpact, 36_000);
+    assert.equal(result.event.serviceAmountSnapshot, 100_000);
+    assert.equal(result.event.discountRateSnapshot, 0.1);
+    assert.equal(result.event.discountSettlementBasisSnapshot, "DISCOUNTED_AMOUNT");
+  });
+
+  test("D/G. USE_BASED + 정상 시술가 기준 -> 매출/정산이 할인 전 시술가 기준으로 계산된다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const { pass } = purchasePrepaidPass(
+      purchaseInput({
+        recognitionMode: "USE_BASED",
+        paidAmount: 100_000,
+        creditAmount: 100_000,
+        bonusSettlementMode: "CREDIT_AMOUNT",
+        discountRate: 0.1,
+        discountSettlementBasis: "ORIGINAL_SERVICE_AMOUNT",
+      }),
+      settings
+    );
+
+    const discountedAmount = calculateDiscountedServiceAmount(100_000, 0.1);
+    const result = useOwnPrepaidCredit(
+      pass,
+      {
+        id: "evt-16d",
+        date: "2026-09-13",
+        creditAmount: discountedAmount,
+        serviceAmount: 100_000,
+        createdAt: NOW,
+      },
+      settings
+    );
+
+    // 정액권에서는 여전히 할인된 금액만 차감되지만, 매출/정산은 할인 전 시술가 기준이다.
+    assert.equal(result.event.creditAmountImpact, -90_000);
+    assert.equal(result.event.salesImpact, 100_000);
+    assert.equal(result.event.settlementImpact, 40_000);
+  });
+
+  test("F. SALE_IMMEDIATE + 할인 -> 사용 시 중복 정산이 없다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const { pass } = purchasePrepaidPass(
+      purchaseInput({
+        recognitionMode: "SALE_IMMEDIATE",
+        discountRate: 0.1,
+        discountSettlementBasis: "ORIGINAL_SERVICE_AMOUNT",
+      }),
+      settings
+    );
+
+    const result = useOwnPrepaidCredit(
+      pass,
+      {
+        id: "evt-16f",
+        date: "2026-09-13",
+        creditAmount: 90_000,
+        serviceAmount: 100_000,
+        createdAt: NOW,
+      },
+      settings
+    );
+
+    assert.equal(result.event.salesImpact, 0);
+    assert.equal(result.event.settlementImpact, 0);
+  });
+
+  test("H. PAID_RATIO 보너스권 + 할인 -> 기존 보너스 환산 로직과 정확히 결합된다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const discountedAmount = calculateDiscountedServiceAmount(100_000, 0.1); // 90,000
+
+    const discountedBasisPass = purchasePrepaidPass(
+      purchaseInput({
+        recognitionMode: "USE_BASED",
+        paidAmount: 1_000_000,
+        creditAmount: 1_100_000,
+        bonusSettlementMode: "PAID_RATIO",
+        discountRate: 0.1,
+        discountSettlementBasis: "DISCOUNTED_AMOUNT",
+      }),
+      settings
+    ).pass;
+
+    const discountedBasisResult = useOwnPrepaidCredit(
+      discountedBasisPass,
+      {
+        id: "evt-16h-1",
+        date: "2026-09-13",
+        creditAmount: discountedAmount,
+        serviceAmount: 100_000,
+        createdAt: NOW,
+      },
+      settings
+    );
+    // convertCreditToSalesAmount(90,000) = round(90,000 * 1,000,000 / 1,100,000)
+    assert.equal(discountedBasisResult.event.salesImpact, 81_818);
+
+    const originalBasisPass = purchasePrepaidPass(
+      purchaseInput({
+        id: "pass-2",
+        recognitionMode: "USE_BASED",
+        paidAmount: 1_000_000,
+        creditAmount: 1_100_000,
+        bonusSettlementMode: "PAID_RATIO",
+        discountRate: 0.1,
+        discountSettlementBasis: "ORIGINAL_SERVICE_AMOUNT",
+      }),
+      settings
+    ).pass;
+
+    const originalBasisResult = useOwnPrepaidCredit(
+      originalBasisPass,
+      {
+        id: "evt-16h-2",
+        date: "2026-09-13",
+        creditAmount: discountedAmount,
+        serviceAmount: 100_000,
+        createdAt: NOW,
+      },
+      settings
+    );
+    // convertCreditToSalesAmount(100,000) = round(100,000 * 1,000,000 / 1,100,000)
+    assert.equal(originalBasisResult.event.salesImpact, 90_909);
+  });
+
+  test("I. 잔액 80000인데 할인 후 차감액 90000이면 사용을 차단한다", () => {
+    const settings = createDefaultSettlementSettings({ baseIncentiveRate: 0.4 });
+    const { pass } = purchasePrepaidPass(
+      purchaseInput({
+        paidAmount: 80_000,
+        creditAmount: 80_000,
+        recognitionMode: "USE_BASED",
+        discountRate: 0.1,
+      }),
+      settings
+    );
+
+    const discountedAmount = calculateDiscountedServiceAmount(100_000, 0.1);
+    assert.equal(discountedAmount, 90_000);
+
+    assert.throws(() =>
+      useOwnPrepaidCredit(
+        pass,
+        {
+          id: "evt-16i",
+          date: "2026-09-13",
+          creditAmount: discountedAmount,
+          serviceAmount: 100_000,
+          createdAt: NOW,
+        },
+        settings
+      )
     );
   });
 });

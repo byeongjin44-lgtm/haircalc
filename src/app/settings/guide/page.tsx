@@ -253,6 +253,37 @@ const GUIDE_SECTIONS: GuideSection[] = [
       </div>
     ),
   },
+  {
+    id: "discount",
+    title: "K. 정액권 사용 할인",
+    summary: "정액권으로 결제하면 시술가에서 일정 %를 할인해주는 정액권도 등록할 수 있습니다.",
+    body: (
+      <div className="flex flex-col gap-2 text-sm text-zinc-600">
+        <p>
+          정액권 등록 화면에서 &quot;정액권 사용 할인율&quot;을 설정하면, 그 정액권으로
+          결제할 때마다 시술가에서 할인이 적용된 만큼만 정액권 잔액에서 차감됩니다.
+        </p>
+        <ExampleCard>
+          정상 시술가 10만원 / 정액권 할인 10% → 실제 정액권 차감 9만원
+        </ExampleCard>
+        <p>할인이 있는 정액권은 디자이너 매출을 인정하는 기준도 함께 선택합니다.</p>
+        <ul className="list-disc space-y-1.5 pl-4">
+          <li>
+            <strong className="text-zinc-800">할인 후 금액 기준</strong> — 정액권에서 실제
+            차감된 금액을 매출로 인정합니다.
+          </li>
+          <li>
+            <strong className="text-zinc-800">정상 시술가 기준</strong> — 고객에게는
+            할인을 적용하지만, 매출은 할인 전 원래 시술가로 인정합니다.
+          </li>
+        </ul>
+        <p className="text-xs text-zinc-400">
+          할인율을 설정하지 않은 정액권(기존 정액권 포함)은 이 기능과 무관하게 지금까지와
+          동일하게 동작합니다.
+        </p>
+      </div>
+    ),
+  },
 ];
 
 export default function SettingsGuidePage() {

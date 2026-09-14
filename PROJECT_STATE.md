@@ -4,18 +4,92 @@
 
 마지막 업데이트: 2026-09-14
 
-작업 브랜치 안내: main은 실사용자 Production 안정판이다. dev 브랜치의 정액권 stale
-state 버그 수정 PART는 커밋/push까지 완료해 `origin/dev`에 올라가 있고(Preview 실기기
-테스트용 체크포인트), 이번 사용 설명서 PART도 이어서 `dev`에서만 작업 중이며 아직
-main에 병합/push하지 않았다. 이번 PART는 아직 커밋하지 않은 상태다(사용자 명시 지시).
+작업 브랜치 안내: main은 실사용자 Production 안정판이다. 정액권 stale state 버그 수정
++ 앱 내 사용 설명서 PART까지는 dev에서 검증 후 main에 fast-forward merge + push
+완료되어 현재 main/origin main/dev/origin dev가 전부 동일 커밋이다. 이번 정액권 사용
+할인율 PART는 다시 `dev`에서만 작업 중이며 아직 커밋하지 않았다(사용자 명시 지시,
+main 수정/merge/push 금지).
 
 ## 1. 현재 상태
 
 상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
 실기기 UX 개선(설치 흐름/저장 피드백) 완료 + 저장 성공 피드백/입력 오류 인라인 표시 완료 +
-정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 + 정액권 삭제 + 환불 전액 버튼
-완료(dev, push됨) + **(dev 브랜치, 미커밋) 앱 내 사용 설명서(/settings/guide) 추가
-완료** / 다음 단계: dev 실기기 재검증 → main 병합 → 실제 배포(Vercel)
+정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 + 정액권 삭제 + 환불 전액 버튼 +
+앱 내 사용 설명서 완료(main 반영됨) + **(dev 브랜치, 미커밋) 정액권 사용 할인율 지원
+완료** / 다음 단계: dev 검증 → 커밋/push → main 병합 → 실제 배포(Vercel)
+
+**정액권 사용 할인율 지원 (2026-09-14, dev 브랜치, 미커밋)**: 일부 매장의 "정액권
+결제 시 시술가 할인" 정책을 지원했다. 기존 계산 결과(일반 거래 정산, 기존 정액권,
+월정산, backup/restore, IndexedDB 구조)는 전혀 바꾸지 않았고, 기존 76개 테스트는
+수정 없이 그대로 통과한다.
+
+1. **데이터 모델**: `PrepaidPass`에 `discountRate?: number`(0~1, 1 미만),
+   `discountSettlementBasis?: "DISCOUNTED_AMOUNT" | "ORIGINAL_SERVICE_AMOUNT"`를
+   추가했다. 둘 다 **선택 필드**라 IndexedDB object store(스키마리스)나 JSON
+   백업에 이 필드가 아예 없는 기존 레코드도 그대로 읽힌다 — migration.ts/backup.ts는
+   객체를 그대로 복사/직렬화할 뿐 필드 목록을 검증하지 않아 코드 변경이 필요 없었다
+   (마이그레이션 불필요로 판단, `storage.ts`/`recordStore.*`/`migration.ts`/
+   `backup.ts` 전혀 미수정). `PrepaidEvent`에는 `serviceAmountSnapshot?`/
+   `discountRateSnapshot?`/`discountSettlementBasisSnapshot?`을 추가해, 할인이
+   적용된 "본인 사용"(USE) 이벤트에만 당시 정상 시술가/적용 할인율/매출 인정 기준을
+   snapshot으로 고정한다(할인 없는 이벤트는 이 필드들을 아예 채우지 않는다 — 기존
+   이벤트와 diff 없음).
+2. **기존 데이터 호환**: `prepaid.ts`에 `resolveDiscountRate(pass)`/
+   `resolveDiscountSettlementBasis(pass)` 두 helper를 추가해 `pass.discountRate ??
+   0`, `pass.discountSettlementBasis ?? "DISCOUNTED_AMOUNT"`를 한 곳에서만
+   처리한다 — 필드가 없는 기존 정액권도 이 helper를 거치면 항상 "할인 0%"와 완전히
+   동일하게 동작한다(테스트 E로 검증).
+3. **할인 계산**: `calculateDiscountedServiceAmount(serviceAmount, discountRate)`
+   순수함수(`prepaid.ts`) 하나로 분리 — `discountedAmount = round(serviceAmount ×
+   (1 - discountRate))`. 기존 `convertCreditToSalesAmount`(보너스 비율 환산)는
+   전혀 건드리지 않고 그대로 재사용한다(중복 구현 없음).
+4. **SALE_IMMEDIATE / USE_BASED와 결합**: `useOwnPrepaidCredit`의 SALE_IMMEDIATE
+   분기(구매 시 이미 매출 인식이라 사용 시 항상 0)는 손대지 않아 할인이 있어도
+   자동으로 중복 정산이 없다(테스트 F). USE_BASED 분기에서만 "매출 인정 기준"을
+   적용한다 — `discountSettlementBasis`가 `ORIGINAL_SERVICE_AMOUNT`이고 할인율이
+   0보다 크고 `serviceAmount`가 전달된 경우에만 정산 매출 계산의 기준값을
+   `input.creditAmount`(할인 후 실제 차감액) 대신 `input.serviceAmount`(할인 전
+   정상 시술가)로 바꾼다. 그 외(할인 없음/할인 후 금액 기준)는 기존과 동일하게
+   `input.creditAmount`를 기준으로 쓴다 — 정액권에서 실제 차감되는 금액
+   (`creditAmountImpact`)은 두 기준 모두에서 항상 할인 후 금액으로 동일하다.
+5. **PAID_RATIO / CREDIT_AMOUNT와 결합**: 위에서 정한 "매출 인정 기준값"을 기존
+   `convertCreditToSalesAmount(pass, salesBasisAmount)`에 그대로 통과시켜, 보너스
+   비율 환산이 할인 기준과 자동으로 올바르게 조합되게 했다(새 분기/특수 케이스 코드
+   없음). 테스트 H로 PAID_RATIO 보너스권 + 할인 조합의 salesImpact가 기존 환산
+   공식과 정확히 일치함을 확인했다.
+6. **UI — `/prepaid/new`**: "정액권 사용 할인율" 필드(빠른 선택 없음/5/10/15/20% +
+   직접입력 숫자칸, 0~100 미만 검증) 추가. 할인율이 0보다 클 때만 "할인 정산 기준"
+   ChoiceGroup([할인 후 금액 기준]/[정상 시술가 기준])과 짧은 예시 설명을 보여준다
+   (할인율 0이면 기존 화면 그대로, UI가 복잡해지지 않는다). `INITIAL_PREPAID_NEW_FORM`
+   /`resetForm()`에도 새 필드를 포함시켜, 지난 PART에서 고친 stale-state 방지
+   원칙(라우트를 떠나면 항상 초기화)을 그대로 유지했다.
+7. **UI — `/entry`**: 결제수단이 정액권이고 선택한 정액권에 할인율이 있을 때만 금액
+   입력 라벨이 "사용금액" → "정상 시술가"로 바뀌고, 입력 아래에 "정액권 할인 N% →
+   실제 차감 N원" 미리보기가 뜬다. 실제로 정액권에서 차감되는 값과 잔액 초과 검증은
+   항상 할인 적용 후 금액(`discountedAmount`) 기준이다(테스트 I에 대응하는 UI 쪽
+   방어 로직). 할인율이 0인 정액권/일반 결제는 라벨·검증·계산 전부 이전과 동일하다.
+8. **UI — `/prepaid/[id]`**: 정액권 요약 카드에 할인율이 0보다 클 때만 "정액권 할인
+   N%"와 "정산 기준" 값을 추가로 보여준다(읽기 전용, 입력 UI는 추가하지 않음 —
+   할인 관련 입력은 등록 화면과 거래등록 화면에서만 받는다). 할인율 0인 정액권은
+   기존 화면 그대로다.
+9. **사용 설명서(`/settings/guide`)**: "K. 정액권 사용 할인" 섹션을 새로 추가해
+   할인 후 금액 기준/정상 시술가 기준의 차이와 10만원/10% 예시를 짧게 설명했다.
+   기존 A~J 섹션 내용은 전혀 바꾸지 않았다. 아직 구현되지 않은 "횟수형 회원권"은
+   넣지 않았다.
+
+검증: `npm run lint` 통과(경고 없음) / `npm test` **84개 전부 통과**(기존 76개
+무수정 그대로 + 신규 8개: `prepaid.test.ts`의 "16. 정액권 사용 할인" describe 블록 —
+A(할인 계산 90,000) / B(할인 0%는 기존과 동일) / C·G(USE_BASED+할인후금액기준) /
+D·G(USE_BASED+정상시술가기준) / E(할인 필드 없는 기존 pass도 0%로 동작) /
+F(SALE_IMMEDIATE+할인은 중복정산 없음) / H(PAID_RATIO 보너스+할인 결합, salesImpact
+81,818/90,909 정확히 일치) / I(잔액 80,000 < 할인후차감 90,000 → 차단)) / `npm run
+build` 정상 완료(`/entry`·`/prepaid/new`는 여전히 "○ Static" — 지난 PART에서 확정한
+force-dynamic 미사용 방침 유지, `staleTimes` 설정도 그대로 없음). `git diff --stat`으로
+`engine.ts`/`recordStore.*`/`migration.ts`/`backup.ts`/`storage.ts`/`summary.ts`/
+`month.ts`가 완전히 무변경임을 재확인했다 — 이번 PART가 수정한 파일은 `types.ts`,
+`prepaid.ts`(순수 함수/타입만 확장, 기존 함수 시그니처는 전부 하위 호환), `labels.ts`,
+`prepaid.test.ts`, `/entry`·`/prepaid/new`·`/prepaid/[id]`·`/settings/guide` 4개
+페이지뿐이다.
 
 **앱 내 사용 설명서 추가 (2026-09-14, dev 브랜치)**: 일반 사용자 테스트 전 온보딩
 목적으로, 계산 로직/데이터 모델/IndexedDB/prepaid 엔진은 전혀 건드리지 않고 순수

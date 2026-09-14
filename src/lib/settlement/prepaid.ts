@@ -7,6 +7,7 @@
 
 import type {
   BonusSettlementMode,
+  PrepaidDiscountSettlementBasis,
   PrepaidEvent,
   PrepaidPass,
   PrepaidPassStatus,
@@ -25,6 +26,9 @@ export interface CreatePrepaidPassInput {
   creditAmount: number;
   recognitionMode: PrepaidPass["recognitionMode"];
   bonusSettlementMode: BonusSettlementMode;
+  /** 정액권 사용 할인율 (0~1, 1 미만). 생략하거나 0이면 할인 없는 기존 정액권과 동일하게 동작한다. */
+  discountRate?: number;
+  discountSettlementBasis?: PrepaidDiscountSettlementBasis;
   label?: string;
   memo?: string;
   createdAt: string;
@@ -33,8 +37,14 @@ export interface CreatePrepaidPassInput {
 export interface PrepaidCreditEventInput {
   id: string;
   date: string;
-  /** 이 이벤트로 차감/환불되는 사용가능액 (항상 0보다 큰 양수로 전달). */
+  /** 이 이벤트로 차감/환불되는 사용가능액 (항상 0보다 큰 양수로 전달). 할인 정액권이면 이미 할인이 적용된 금액이어야 한다. */
   creditAmount: number;
+  /**
+   * 할인 정액권 "본인 사용"(useOwnPrepaidCredit) 전용: 할인 전 정상 시술가.
+   * 채워지면 이벤트에 그대로 snapshot 저장되고, 매출 인정 기준(ORIGINAL_SERVICE_AMOUNT)일 때
+   * 정산 매출 계산의 기준값으로도 쓰인다. 할인이 없는 기존 흐름은 비워둔다.
+   */
+  serviceAmount?: number;
   memo?: string;
   createdAt: string;
 }
@@ -86,6 +96,24 @@ export function convertCreditToSalesAmount(
   return Math.round(creditAmount * (pass.paidAmount / pass.creditAmount));
 }
 
+/** 이 기능 이전에 만들어진 정액권(필드 없음)은 할인 0%와 동일하게 취급한다. */
+export function resolveDiscountRate(pass: PrepaidPass): number {
+  return pass.discountRate ?? 0;
+}
+
+/** 이 기능 이전에 만들어진 정액권(필드 없음)은 기존 동작과 같은 DISCOUNTED_AMOUNT로 취급한다. */
+export function resolveDiscountSettlementBasis(pass: PrepaidPass): PrepaidDiscountSettlementBasis {
+  return pass.discountSettlementBasis ?? "DISCOUNTED_AMOUNT";
+}
+
+/** 정상 시술가에 할인율을 적용해 정액권에서 실제 차감할 금액을 계산한다 (원 단위 정수). */
+export function calculateDiscountedServiceAmount(
+  serviceAmount: number,
+  discountRate: number
+): number {
+  return Math.round(serviceAmount * (1 - discountRate));
+}
+
 export function closePrepaidPass(pass: PrepaidPass): PrepaidPass {
   return { ...pass, status: "CLOSED" };
 }
@@ -116,6 +144,8 @@ export function purchasePrepaidPass(
     remainingBalance: input.creditAmount,
     recognitionMode: input.recognitionMode,
     bonusSettlementMode: input.bonusSettlementMode,
+    discountRate: input.discountRate,
+    discountSettlementBasis: input.discountSettlementBasis,
     status: "ACTIVE",
     label: input.label,
     memo: input.memo,
@@ -165,11 +195,21 @@ export function useOwnPrepaidCredit(
   };
 
   const commissionRateSnapshot = settings.baseIncentiveRate;
+  const discountRate = resolveDiscountRate(pass);
+  const discountSettlementBasis = resolveDiscountSettlementBasis(pass);
   let salesImpact = 0;
   let settlementImpact = 0;
 
   if (pass.recognitionMode === "USE_BASED") {
-    const salesEquivalent = convertCreditToSalesAmount(pass, input.creditAmount);
+    // 할인 정액권 + 정상 시술가 기준이면 할인 전 금액을, 그 외(할인 없음/할인 후 금액 기준)는
+    // 기존과 동일하게 실제 차감액(input.creditAmount)을 매출 환산 기준으로 쓴다.
+    const salesBasisAmount =
+      discountRate > 0 &&
+      discountSettlementBasis === "ORIGINAL_SERVICE_AMOUNT" &&
+      input.serviceAmount !== undefined
+        ? input.serviceAmount
+        : input.creditAmount;
+    const salesEquivalent = convertCreditToSalesAmount(pass, salesBasisAmount);
     salesImpact = salesEquivalent;
     settlementImpact = Math.round(salesEquivalent * commissionRateSnapshot);
   }
@@ -183,6 +223,13 @@ export function useOwnPrepaidCredit(
     salesImpact,
     settlementImpact,
     commissionRateSnapshot,
+    ...(input.serviceAmount !== undefined
+      ? {
+          serviceAmountSnapshot: input.serviceAmount,
+          discountRateSnapshot: discountRate,
+          discountSettlementBasisSnapshot: discountSettlementBasis,
+        }
+      : {}),
     memo: input.memo,
     createdAt: input.createdAt,
   };
