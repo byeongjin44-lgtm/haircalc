@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
   MaterialCostMode,
@@ -209,6 +210,19 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-bold">정산 설정</h1>
+
+      <Link
+        href="/settings/guide"
+        className="flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm active:bg-zinc-50"
+      >
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">사용 설명서</p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            정산 방식과 정액권 사용법을 확인할 수 있습니다.
+          </p>
+        </div>
+        <span className="text-lg text-zinc-300">›</span>
+      </Link>
 
       <section className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">
         <p className="text-sm font-medium text-zinc-500">기본 설정</p>
