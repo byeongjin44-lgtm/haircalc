@@ -34,6 +34,14 @@ export function formatManWon(amount: number): string {
   return `${man}만`;
 }
 
+/**
+ * 정액권 등록 화면의 "보너스 빠른 선택" 계산. 실결제금액에 보너스율을 적용해
+ * 사용가능금액을 원 단위 정수로 계산한다. bonusRate 자체는 UI 편의값일 뿐 저장되지 않는다.
+ */
+export function applyBonusRate(paidAmount: number, bonusRate: number): number {
+  return Math.round(paidAmount * (1 + bonusRate));
+}
+
 /** 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD). new Date().toISOString()은 UTC 기준이라 자정 근처에 날짜가 하루 밀릴 수 있다. */
 export function todayDateString(): string {
   const now = new Date();

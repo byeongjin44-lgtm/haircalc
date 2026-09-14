@@ -2,14 +2,114 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-09-13
+마지막 업데이트: 2026-09-14
+
+작업 브랜치 안내: main은 실사용자 Production 안정판이다. 이 PART(정액권 stale state
+버그 수정/UX 개선)는 `dev` 브랜치에서 작업했고, 아직 main에 병합/push하지 않았다.
+커밋도 아직 하지 않은 상태다(사용자 명시 지시).
 
 ## 1. 현재 상태
 
 상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
-실기기 UX 개선(설치 흐름/저장 피드백) 완료 +
-**저장 성공 피드백을 중앙 오버레이로 강화 + 필수값/입력 오류 인라인 표시 완료** /
-다음 단계: 실제 배포(Vercel) + 실기기 설치·입력 테스트
+실기기 UX 개선(설치 흐름/저장 피드백) 완료 + 저장 성공 피드백/입력 오류 인라인 표시 완료 +
+**(dev 브랜치, 미병합) 정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 +
+정액권 삭제 + 환불 전액 버튼 완료** / 다음 단계: dev 실기기 재검증 → main 병합 →
+실제 배포(Vercel)
+
+**정액권 등록 stale state 버그 수정 + UX 보강 (2026-09-14, dev 브랜치)**: 실기기에서
+"정액권 신규등록 화면에서 정산 방식을 다시 클릭하지 않고 저장하면 직전에 등록했던
+값으로 저장된다"는 버그가 보고되어 원인을 찾아 수정했다. 계산 엔진(`engine.ts`,
+`prepaid.ts`), `types.ts`, `recordStore.*`, `migration.ts`, `backup.ts`는 전혀 수정하지
+않았다 (`git diff --stat`으로 무변경 재확인).
+
+1. **stale state 버그의 정확한 원인**: `/prepaid/new`, `/entry`의 `정산 방식`/
+   `보너스 정산 방식` 선택 UI(`ChoiceGroup`) 자체는 처음부터 `defaultValue`/
+   `defaultChecked` 없이 완전히 React state(`useState`)로만 제어되고 있었다 — 코드
+   레벨의 uncontrolled 버그는 아니었다. 실제 원인은 **Next.js 16.3의 navigation state
+   preservation**(라우트를 떠나도 즉시 언마운트하지 않고 Activity로 "hidden" 상태만
+   되면서 컴포넌트의 `useState` 값을 그대로 들고 있는 동작)이다. 정액권 A를
+   PAID_RATIO로 등록하고 다른 화면을 거쳐 짧은 시간 안에 다시 `/prepaid/new`로
+   돌아오면, 화면은 다시 그려지는 것처럼 보여도 실제 `useState` 값은 직전 방문(정액권
+   A 등록 시점)의 값을 그대로 들고 있어, 버튼을 새로 클릭하지 않고 저장하면
+   `purchasePrepaidPass`에 그 이전 값이 그대로 전달됐다. `defaultValue`/
+   `defaultChecked`/`useRef`/이중 state 등은 프로젝트 전체(grep)에서 발견되지 않았다.
+2. **수정 방식**: 처음에는 `next.config.ts`의 `experimental.staleTimes`와
+   `/entry`·`/prepaid/new`의 `force-dynamic` layout으로 서버/캐시 정책을 바꿔
+   우회하려 했으나, 사용자 지시에 따라 **전역/서버 캐시 정책으로 폼 state 문제를
+   해결하지 않는 방향으로 다시 구현했다** — 두 설정 모두 제거했고 `next.config.ts`는
+   이 PART 이전 상태로 완전히 복원했다(`experimental.staleTimes` 없음, `force-dynamic`
+   layout 없음). 대신 각 폼 컴포넌트 안에서 **명시적으로 초기 상태를 정의하고
+   리셋한다**: `INITIAL_PREPAID_NEW_FORM`/`INITIAL_ENTRY_FORM` 상수(모든 `useState`
+   초기값이 이 한 곳만 참조)와 `resetForm()` 함수를 각각 정의하고, `useLayoutEffect`의
+   **cleanup**에서 `resetForm()`을 호출한다. Next.js 16.3의 Activity가 라우트를
+   hidden으로 전환하거나 실제로 언마운트할 때 effect cleanup이 실행되는 것을 이용해,
+   화면을 떠나는 시점에 항상 폼을 초기화하고 다시 보여질 때는 새 폼으로 시작하게
+   했다. 화면의 선택 하이라이트는 여전히 `value === option` 형태로 실제 state만
+   보고 렌더링되므로, "화면 selected 상태 = 실제 저장 state"가 항상 성립한다.
+3. **새로고침 없이 정상 동작하는지**: 새로고침(`location.reload`)은 코드 어디에도
+   추가하지 않았다. `resetForm()`은 순수하게 컴포넌트 내부 `useState` setter만
+   호출하는 일반 함수이고, cleanup은 React가 hidden/unmount 시점에 자동으로 호출해
+   주므로 페이지를 새로고침하지 않아도 재방문 시 항상 초기 상태에서 시작한다. (이
+   세션은 서버 환경이라 실기기에서 "등록 → 목록 → 재진입"을 반복하는 실제 재현은
+   못 했고, 실기기 재검증이 필요하다.)
+
+4. **버튼 표시 순서 변경 (`labels.ts`)**: 기본값 정책은 그대로 두고 화면 표시 순서만
+   바꿨다 — `PREPAID_RECOGNITION_MODES`를 `[USE_BASED, SALE_IMMEDIATE]`
+   ("사용 시 반영" 먼저), `BONUS_SETTLEMENT_MODES`를 `[PAID_RATIO, CREDIT_AMOUNT]`
+   ("실결제 비율 환산" 먼저) 순으로 재정렬했다. `/prepaid/new`의 `useState` 기본값은
+   여전히 `SALE_IMMEDIATE`/`CREDIT_AMOUNT` 그대로다(선택 하이라이트는 버튼 위치가
+   아니라 실제 state 값만 기준으로 표시되므로 순서 변경과 기본값은 서로 독립적이다).
+5. **입력 순서 + 보너스 빠른 선택 (`/prepaid/new`)**: 식별명 → 실결제금액 →
+   사용가능금액 순서는 기존과 동일하게 유지됐고, 그 바로 아래에 "보너스" 드롭다운
+   (없음 0%/+5%/+10%/+15%/+20%/+30%)을 신규 추가했다. 선택 시
+   `creditAmount = round(paidAmount × (1+bonusRate))` 공식으로 사용가능금액 입력을
+   자동 채운다(원 단위 정수 반올림, `format.ts`의 신규 순수함수 `applyBonusRate`).
+   `bonusRate` 자체는 UI 편의값일 뿐 `PrepaidPass`에는 기존과 동일하게 `paidAmount`/
+   `creditAmount`만 저장된다(새 필드 없음). 자동입력 후에도 사용가능금액 입력은 그대로
+   직접 수정 가능한 일반 `<input>`이다.
+6. **보너스 정산방식 설명 (`/prepaid/new`)**: "보너스 정산 방식" 선택지 아래에 실결제
+   비율 환산/차감금액 기준 각각의 의미와 22만원 사용 예시(20만원 vs 22만원 인정),
+   "보너스가 없으면 두 방식 결과가 같다"는 설명을 짧게 추가했다.
+7. **정액권 삭제 기능 (`/prepaid/[id]`)**: 화면 하단에 빨간 테두리의 "정액권 삭제"
+   버튼을 추가했다. 클릭 시 `window.confirm`이 아닌 프로젝트 내부 확인 오버레이
+   (배경 dim+blur, "취소"/"삭제" 버튼)가 뜨고, "삭제"를 눌러야 실제 삭제가 진행된다.
+   저장 계층에는 `storage.ts`에 신규 함수 `deletePrepaidPassFromStore(store, passId)`
+   (RecordStore를 인자로 받아 Node 테스트 가능)와 이를 감싸는 `deletePrepaidPass(passId)`
+   를 추가했다 — 기존 `recordStore.ts`/`recordStore.indexeddb.ts`/`recordStore.memory.ts`
+   는 전혀 수정하지 않고, 이미 인터페이스에 있던 `delete()`만 사용했다(IndexedDB 직접
+   우회 없음). 삭제는 해당 PrepaidPass와 `prepaidPassId`가 일치하는 모든 PrepaidEvent를
+   함께 지운다 — 삭제 성공 시 `/prepaid` 목록으로 이동하며 중앙 성공 오버레이
+   "정액권이 삭제되었습니다."를 띄우고, 실패 시 오버레이 없이 폼에 오류만 남긴다.
+8. **환불 폼 "전액" 버튼 (`/prepaid/[id]`)**: 환불(`REFUND`) 액션의 `CreditEventForm`에만
+   `showFillBalanceButton` prop으로 "전액" 버튼을 추가했다. 클릭하면 금액 입력에
+   기존 `pass.remainingBalance`(엔진이 이벤트 이력으로 계산해 저장해 둔 현재 잔액)를
+   그대로 채워 넣는다 — 별도 잔액 계산식을 새로 만들지 않았다. 이후 값은 직접 수정
+   가능하고, 잔액이 0이면 버튼이 비활성화된다. 실제 환불 처리(정산 영향 계산)는
+   기존 `refundPrepaidCredit` 그대로 사용한다.
+9. **`/entry` state reset**: `/entry`도 처음부터 모든 선택 UI(고객유형/시술유형/
+   결제수단)가 `useState` 기반 컨트롤드 state였고 `defaultValue`류 문제는 없었다.
+   같은 화면에 남아있는 "저장 성공 후 연속 입력" 흐름과, "화면을 실제로 떠났다가
+   돌아오는" 흐름을 명확히 분리했다: 저장 성공 시 `handleSave` 안에서는 기존 그대로
+   `amountText`/`memo`만 초기화하고 날짜·고객유형·시술유형·결제수단·선택한 정액권은
+   그대로 유지한다(기존 정책 그대로, 코드도 손대지 않음). 반면 `useLayoutEffect`
+   cleanup에서 호출하는 `resetForm()`은 이 두 흐름과 별개로, 화면을 실제로 떠날
+   때(hidden 전환/언마운트)만 날짜/금액/고객유형/시술유형/결제수단/선택한 정액권/
+   메모/검증 오류를 전부 초기값으로 되돌린다 — 같은 화면에서 저장을 반복하는 동안은
+   이 cleanup이 실행되지 않으므로 연속 입력 편의성에는 영향이 없다.
+
+검증: `npm run lint` 통과(경고 없음) / `npm test` 76개 전부 통과(기존 71개 + 신규
+5개: `format.test.ts`의 `applyBonusRate` 3개, `storage.test.ts`의
+`deletePrepaidPassFromStore` 2개 — 정액권 삭제가 대상 pass/event만 지우고 다른
+pass/event에 영향 없음을 검증) / `npm run build` 정상 완료, `/entry`·`/prepaid/new`는
+"○(Static)"으로 그대로다(이번엔 force-dynamic으로 바꾸지 않았다). `git diff --stat`으로
+`engine.ts`/`prepaid.ts`/`types.ts`/`recordStore.*`/`migration.ts`/`backup.ts`가 완전히
+무변경임을 재확인했다(`storage.ts`는 기존 함수를 건드리지 않고 신규 함수만 추가하는
+방식으로만 수정). `next.config.ts`에 `experimental.staleTimes` 없음, `/entry`·
+`/prepaid/new`에 force-dynamic용 layout 없음을 재확인했다. A(재진입 시 실제 state와
+화면 기본값 일치)는 React 컴포넌트 마운트/언마운트 타이밍에 의존하는 문제라 Node
+테스트로 직접 재현할 수 없어 코드 리뷰(각 폼의 `resetForm()`이 모든 transient state를
+빠짐없이 초기화하는지 확인)로 검증했고, 실기기에서 "등록 → 목록 → 재진입 → 저장"을
+반복하는 최종 재현 테스트가 필요하다.
 
 **저장 피드백/입력 검증 강화 (2026-09-13)**: 실기기 테스트에서 "저장 성공 피드백과
 입력 유효성 오류가 눈에 잘 띄지 않는다"는 문제만 수정했다. 계산 엔진(`engine.ts`,

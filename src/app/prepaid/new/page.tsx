@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import { purchasePrepaidPass } from "@/lib/settlement/prepaid";
@@ -12,7 +12,7 @@ import {
   PREPAID_RECOGNITION_MODES,
   PREPAID_RECOGNITION_MODE_LABELS,
 } from "@/lib/settlement/labels";
-import { todayDateString } from "@/lib/settlement/format";
+import { applyBonusRate, todayDateString } from "@/lib/settlement/format";
 import { loadSettlementSettings, recordPrepaidLedgerResult } from "@/lib/settlement/storage";
 import type { BonusSettlementMode, PrepaidRecognitionMode, SettlementSettings } from "@/lib/settlement/types";
 
@@ -47,12 +47,38 @@ function ChoiceGroup<T extends string>({
   );
 }
 
+/** 정액권 등록 화면의 보너스 빠른 선택 옵션. bonusRate는 UI 편의값일 뿐 저장되는 데이터 모델에는 없다. */
+const BONUS_RATE_OPTIONS: readonly { rate: number; label: string }[] = [
+  { rate: 0, label: "보너스 없음 0%" },
+  { rate: 0.05, label: "+5%" },
+  { rate: 0.1, label: "+10%" },
+  { rate: 0.15, label: "+15%" },
+  { rate: 0.2, label: "+20%" },
+  { rate: 0.3, label: "+30%" },
+];
+
 /** 저장 시도 후에만 채워지는 필드별 오류. */
 type PrepaidNewFieldErrors = {
   date?: string;
   label?: string;
   paidAmount?: string;
   creditAmount?: string;
+};
+
+/**
+ * 신규 등록 폼의 초기값. 날짜(오늘)만 매 리셋 시점에 다시 계산해야 해서 별도로 다룬다.
+ * resetForm()과 useState 초기값이 이 한 곳만 바라보게 해, "화면 선택 상태 = 실제 state"가
+ * 항상 성립하게 한다.
+ */
+const INITIAL_PREPAID_NEW_FORM = {
+  label: "",
+  paidAmountText: "",
+  creditAmountText: "",
+  creditTouched: false,
+  bonusRateText: "0",
+  recognitionMode: "SALE_IMMEDIATE" as PrepaidRecognitionMode,
+  bonusSettlementMode: "CREDIT_AMOUNT" as BonusSettlementMode,
+  memo: "",
 };
 
 export default function PrepaidNewPage() {
@@ -70,17 +96,47 @@ export default function PrepaidNewPage() {
   }, []);
 
   const [date, setDate] = useState(todayDateString());
-  const [label, setLabel] = useState("");
-  const [paidAmountText, setPaidAmountText] = useState("");
-  const [creditAmountText, setCreditAmountText] = useState("");
-  const [creditTouched, setCreditTouched] = useState(false);
-  const [recognitionMode, setRecognitionMode] =
-    useState<PrepaidRecognitionMode>("SALE_IMMEDIATE");
-  const [bonusSettlementMode, setBonusSettlementMode] =
-    useState<BonusSettlementMode>("CREDIT_AMOUNT");
-  const [memo, setMemo] = useState("");
+  const [label, setLabel] = useState(INITIAL_PREPAID_NEW_FORM.label);
+  const [paidAmountText, setPaidAmountText] = useState(INITIAL_PREPAID_NEW_FORM.paidAmountText);
+  const [creditAmountText, setCreditAmountText] = useState(
+    INITIAL_PREPAID_NEW_FORM.creditAmountText
+  );
+  const [creditTouched, setCreditTouched] = useState(INITIAL_PREPAID_NEW_FORM.creditTouched);
+  const [bonusRateText, setBonusRateText] = useState(INITIAL_PREPAID_NEW_FORM.bonusRateText);
+  const [recognitionMode, setRecognitionMode] = useState<PrepaidRecognitionMode>(
+    INITIAL_PREPAID_NEW_FORM.recognitionMode
+  );
+  const [bonusSettlementMode, setBonusSettlementMode] = useState<BonusSettlementMode>(
+    INITIAL_PREPAID_NEW_FORM.bonusSettlementMode
+  );
+  const [memo, setMemo] = useState(INITIAL_PREPAID_NEW_FORM.memo);
   const [fieldErrors, setFieldErrors] = useState<PrepaidNewFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+
+  /** 폼을 초기 상태로 되돌린다. 날짜는 "오늘"이라 호출 시점에 다시 계산한다. */
+  function resetForm() {
+    setDate(todayDateString());
+    setLabel(INITIAL_PREPAID_NEW_FORM.label);
+    setPaidAmountText(INITIAL_PREPAID_NEW_FORM.paidAmountText);
+    setCreditAmountText(INITIAL_PREPAID_NEW_FORM.creditAmountText);
+    setCreditTouched(INITIAL_PREPAID_NEW_FORM.creditTouched);
+    setBonusRateText(INITIAL_PREPAID_NEW_FORM.bonusRateText);
+    setRecognitionMode(INITIAL_PREPAID_NEW_FORM.recognitionMode);
+    setBonusSettlementMode(INITIAL_PREPAID_NEW_FORM.bonusSettlementMode);
+    setMemo(INITIAL_PREPAID_NEW_FORM.memo);
+    setFieldErrors({});
+    setFormError(null);
+  }
+
+  // Next.js 16.3부터 라우트를 떠나도 곧바로 언마운트되지 않고 Activity로 hidden 상태만 되면서
+  // useState 값을 그대로 들고 있을 수 있다 — 그대로 두면 이 화면을 재방문했을 때 직전 등록
+  // 값이 남아있는 채로 다시 저장될 위험이 있다. cleanup에서 폼을 초기화해, hidden/unmount
+  // 시점에 항상 리셋되고 다시 보여질 때는 새 등록 폼으로 시작하게 한다.
+  useLayoutEffect(() => {
+    return () => {
+      resetForm();
+    };
+  }, []);
 
   const paidAmount = Number(paidAmountText);
   const creditAmount = Number(creditAmountText);
@@ -95,6 +151,16 @@ export default function PrepaidNewPage() {
     setCreditAmountText(value);
     setCreditTouched(true);
     setFieldErrors((prev) => ({ ...prev, creditAmount: undefined }));
+  }
+
+  function handleBonusRateChange(value: string) {
+    setBonusRateText(value);
+    const rate = Number(value);
+    if (Number.isFinite(paidAmount) && paidAmount > 0 && Number.isFinite(rate)) {
+      setCreditAmountText(String(applyBonusRate(paidAmount, rate)));
+      setCreditTouched(true);
+      setFieldErrors((prev) => ({ ...prev, creditAmount: undefined }));
+    }
   }
 
   function validatePrepaidNew(): PrepaidNewFieldErrors {
@@ -224,6 +290,21 @@ export default function PrepaidNewPage() {
           <FieldError message={fieldErrors.creditAmount} />
         </label>
 
+        <label className="flex flex-col gap-1">
+          <span className="text-sm text-zinc-500">보너스</span>
+          <select
+            value={bonusRateText}
+            onChange={(e) => handleBonusRateChange(e.target.value)}
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
+          >
+            {BONUS_RATE_OPTIONS.map((option) => (
+              <option key={option.rate} value={option.rate}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <fieldset className="flex flex-col gap-2">
           <legend className="text-sm text-zinc-500">정산 방식</legend>
           <ChoiceGroup
@@ -242,6 +323,20 @@ export default function PrepaidNewPage() {
             onChange={setBonusSettlementMode}
             labels={BONUS_SETTLEMENT_MODE_LABELS}
           />
+          <div className="rounded-xl bg-zinc-50 p-3 text-xs text-zinc-500">
+            <p>
+              <span className="font-semibold text-zinc-700">실결제 비율 환산</span> — 보너스를
+              제외하고 실제 결제한 비율만 매출로 계산합니다.
+            </p>
+            <p className="mt-1">
+              <span className="font-semibold text-zinc-700">차감금액 기준</span> — 정액권에서
+              차감된 금액 전체를 매출로 계산합니다.
+            </p>
+            <p className="mt-1">
+              예) 100만원 결제 / 110만원 사용가능 중 22만원 사용 시 → 실결제비율환산 20만원 인정,
+              차감금액기준 22만원 인정. 보너스가 없는 정액권은 두 방식의 결과가 같습니다.
+            </p>
+          </div>
         </fieldset>
 
         <label className="flex flex-col gap-1">

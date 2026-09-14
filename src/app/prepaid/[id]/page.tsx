@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
@@ -21,6 +21,7 @@ import {
   type PrepaidLedgerResult,
 } from "@/lib/settlement/prepaid";
 import {
+  deletePrepaidPass,
   loadPrepaidEvents,
   loadPrepaidPasses,
   loadSettlementSettings,
@@ -49,6 +50,7 @@ const ACTION_SUCCESS_MESSAGES: Record<ActionType, string> = {
 
 export default function PrepaidDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const passId = params.id;
   const { showSuccess } = useSuccessOverlay();
 
@@ -57,6 +59,9 @@ export default function PrepaidDetailPage() {
   const [events, setEvents] = useState<PrepaidEvent[]>([]);
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -92,6 +97,23 @@ export default function PrepaidDetailPage() {
     setEvents((prev) => [result.event, ...prev]);
     setActiveAction(null);
     showSuccess(ACTION_SUCCESS_MESSAGES[action]);
+  }
+
+  async function handleDeleteConfirmed() {
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deletePrepaidPass(passId);
+    } catch (e) {
+      // 삭제 실패 시에는 성공 오버레이/이동 없이 화면에 오류만 남긴다.
+      setDeleteError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      setIsDeleting(false);
+      return;
+    }
+
+    setShowDeleteConfirm(false);
+    showSuccess("정액권이 삭제되었습니다.");
+    router.push("/prepaid");
   }
 
   if (pass === undefined || !settings) {
@@ -205,6 +227,7 @@ export default function PrepaidDetailPage() {
           compute={(input) => refundPrepaidCredit(pass, input, settings)}
           onSaved={(result) => handleSaved(result, "REFUND")}
           variant="risky"
+          showFillBalanceButton
         />
       )}
       {activeAction === "ADJUSTMENT" && (
@@ -242,6 +265,54 @@ export default function PrepaidDetailPage() {
           </ul>
         )}
       </section>
+
+      <section className="flex flex-col gap-2 rounded-2xl border border-red-200 bg-white p-5">
+        <button
+          type="button"
+          onClick={() => {
+            setDeleteError(null);
+            setShowDeleteConfirm(true);
+          }}
+          className="min-h-[48px] rounded-xl border border-red-600 py-3 text-center text-sm font-semibold text-red-600"
+        >
+          정액권 삭제
+        </button>
+        {deleteError && <p className="text-center text-sm text-red-500">{deleteError}</p>}
+      </section>
+
+      {showDeleteConfirm && (
+        <div
+          role="alertdialog"
+          aria-live="assertive"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-6 backdrop-blur-sm"
+        >
+          <div className="flex w-full max-w-[340px] flex-col gap-3 rounded-2xl bg-white p-6 text-center shadow-xl">
+            <p className="text-base font-semibold text-zinc-900">이 정액권을 삭제할까요?</p>
+            <p className="text-sm text-zinc-500">
+              정액권과 연결된 사용/환불/조정 내역도 함께 삭제되며 월정산 결과가 변경될 수
+              있습니다.
+            </p>
+            <div className="mt-1 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="min-h-[48px] flex-1 rounded-xl bg-zinc-100 text-sm font-semibold text-zinc-700 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirmed}
+                disabled={isDeleting}
+                className="min-h-[48px] flex-1 rounded-xl bg-red-600 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {isDeleting ? "삭제 중..." : "삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -251,11 +322,13 @@ function CreditEventForm({
   compute,
   onSaved,
   variant = "default",
+  showFillBalanceButton = false,
 }: {
   pass: PrepaidPass;
   compute: (input: PrepaidCreditEventInput) => PrepaidLedgerResult;
   onSaved: (result: PrepaidLedgerResult) => void | Promise<void>;
   variant?: "default" | "risky";
+  showFillBalanceButton?: boolean;
 }) {
   const [date, setDate] = useState(todayDateString());
   const [amountText, setAmountText] = useState("");
@@ -332,18 +405,33 @@ function CreditEventForm({
 
       <label className="flex flex-col gap-1">
         <span className="text-sm text-zinc-500">사용/환불 금액</span>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          placeholder="0"
-          value={amountText}
-          onChange={(e) => {
-            setAmountText(e.target.value);
-            setFieldErrors((prev) => ({ ...prev, amount: undefined }));
-          }}
-          className={`rounded-lg border px-3 py-3 text-2xl font-semibold ${fieldBorderClass(!!fieldErrors.amount)}`}
-        />
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder="0"
+            value={amountText}
+            onChange={(e) => {
+              setAmountText(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, amount: undefined }));
+            }}
+            className={`flex-1 rounded-lg border px-3 py-3 text-2xl font-semibold ${fieldBorderClass(!!fieldErrors.amount)}`}
+          />
+          {showFillBalanceButton && (
+            <button
+              type="button"
+              disabled={pass.remainingBalance <= 0}
+              onClick={() => {
+                setAmountText(String(pass.remainingBalance));
+                setFieldErrors((prev) => ({ ...prev, amount: undefined }));
+              }}
+              className="rounded-lg border border-zinc-200 px-3 text-sm font-semibold text-zinc-700 disabled:opacity-40"
+            >
+              전액
+            </button>
+          )}
+        </div>
         <FieldError message={fieldErrors.amount} />
       </label>
 

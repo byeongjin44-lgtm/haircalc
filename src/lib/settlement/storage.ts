@@ -8,7 +8,7 @@ import { createDefaultSettlementSettings } from "./engine.ts";
 import { buildBackup, restoreBackup, type BackupData } from "./backup.ts";
 import { clearLegacyLocalStorage, ensureMigrated } from "./migration.ts";
 import { indexedDbStore } from "./recordStore.indexeddb.ts";
-import { STORE_NAMES } from "./recordStore.ts";
+import { STORE_NAMES, type RecordStore } from "./recordStore.ts";
 import type { PrepaidLedgerResult } from "./prepaid.ts";
 import type {
   MonthlyActualPayout,
@@ -109,6 +109,29 @@ export async function appendPrepaidEvent(event: PrepaidEvent): Promise<void> {
 export async function recordPrepaidLedgerResult(result: PrepaidLedgerResult): Promise<void> {
   await upsertPrepaidPass(result.pass);
   await appendPrepaidEvent(result.event);
+}
+
+/**
+ * 정액권 삭제 로직 (store를 인자로 받아 Node 테스트에서도 검증 가능). pass와 그에 연결된
+ * 모든 PrepaidEvent를 함께 지운다 — 둘 중 하나만 남으면 원장이 깨지므로 항상 같이 지운다.
+ */
+export async function deletePrepaidPassFromStore(
+  store: RecordStore,
+  passId: string
+): Promise<void> {
+  const events = await store.getAll<PrepaidEvent>("prepaidEvents");
+  for (const event of events) {
+    if (event.prepaidPassId === passId) {
+      await store.delete("prepaidEvents", event.id);
+    }
+  }
+  await store.delete("prepaidPasses", passId);
+}
+
+export async function deletePrepaidPass(passId: string): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await deletePrepaidPassFromStore(store, passId);
 }
 
 /** 전체 데이터를 하나의 JSON 백업 객체로 만든다 (/settings의 "백업 파일 내보내기"). */

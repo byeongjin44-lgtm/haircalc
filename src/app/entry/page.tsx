@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
 import { buildTransactionSnapshot, calculateSettlement } from "@/lib/settlement/engine";
@@ -80,20 +80,61 @@ type EntryFieldErrors = {
   prepaidPass?: string;
 };
 
+/**
+ * 거래등록 폼의 초기값. 날짜(오늘)만 매 리셋 시점에 다시 계산해야 해서 별도로 다룬다.
+ * 저장 성공 후 "연속 입력 편의성"(날짜/고객유형/시술유형/결제수단 유지)을 위한 부분
+ * 초기화와는 다르게, 이 값은 route를 실제로 떠났다가 돌아왔을 때의 전체 초기화에만 쓴다.
+ */
+const INITIAL_ENTRY_FORM = {
+  amountText: "",
+  customerType: "OTHER" as CustomerType,
+  serviceType: "CUT" as ServiceType,
+  paymentChoice: "CASH" as PaymentChoice,
+  selectedPassId: "",
+  memo: "",
+};
+
 export default function EntryPage() {
   const { showSuccess } = useSuccessOverlay();
   const [settings, setSettings] = useState<SettlementSettings | null>(null);
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
 
   const [date, setDate] = useState(todayDateString());
-  const [amountText, setAmountText] = useState("");
-  const [customerType, setCustomerType] = useState<CustomerType>("OTHER");
-  const [serviceType, setServiceType] = useState<ServiceType>("CUT");
-  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>("CASH");
-  const [selectedPassId, setSelectedPassId] = useState("");
-  const [memo, setMemo] = useState("");
+  const [amountText, setAmountText] = useState(INITIAL_ENTRY_FORM.amountText);
+  const [customerType, setCustomerType] = useState<CustomerType>(
+    INITIAL_ENTRY_FORM.customerType
+  );
+  const [serviceType, setServiceType] = useState<ServiceType>(INITIAL_ENTRY_FORM.serviceType);
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>(
+    INITIAL_ENTRY_FORM.paymentChoice
+  );
+  const [selectedPassId, setSelectedPassId] = useState(INITIAL_ENTRY_FORM.selectedPassId);
+  const [memo, setMemo] = useState(INITIAL_ENTRY_FORM.memo);
   const [fieldErrors, setFieldErrors] = useState<EntryFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+
+  /** route를 실제로 떠났다가 돌아왔을 때만 쓰는 전체 초기화. 날짜는 호출 시점에 다시 계산한다. */
+  function resetForm() {
+    setDate(todayDateString());
+    setAmountText(INITIAL_ENTRY_FORM.amountText);
+    setCustomerType(INITIAL_ENTRY_FORM.customerType);
+    setServiceType(INITIAL_ENTRY_FORM.serviceType);
+    setPaymentChoice(INITIAL_ENTRY_FORM.paymentChoice);
+    setSelectedPassId(INITIAL_ENTRY_FORM.selectedPassId);
+    setMemo(INITIAL_ENTRY_FORM.memo);
+    setFieldErrors({});
+    setFormError(null);
+  }
+
+  // Next.js 16.3부터 라우트를 떠나도 곧바로 언마운트되지 않고 Activity로 hidden 상태만 되면서
+  // useState 값을 그대로 들고 있을 수 있다. 저장 성공 후 같은 화면에 남아있을 때의 부분
+  // 초기화(아래 handleSave, 금액/메모만 리셋)와는 별개로, 이 cleanup은 화면을 실제로 떠날
+  // 때(hidden 전환/언마운트)만 전체 폼을 초기화해 재방문 시 항상 새 거래 폼으로 시작하게 한다.
+  useLayoutEffect(() => {
+    return () => {
+      resetForm();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
