@@ -198,3 +198,56 @@ export interface MonthlyActualPayout {
   amount: number;
   updatedAt: string;
 }
+
+// --- 회원권 (횟수 차감형) ---
+// 정액권(선불권, 금액 잔액 차감)과는 별개의 상품이다. 정액권 타입에 억지로 끼워넣지 않고
+// 완전히 분리된 MembershipPass/MembershipEvent로 관리한다 (예: 클리닉 10회권 50만원 ->
+// 1회 사용마다 횟수만 차감). 이 앱은 개인 정산용이므로 "타 디자이너 사용"은 정액권과
+// 동일하게 현재 사용자 매출/정산에서 필요한 조정으로만 표현한다.
+
+/** SALE_IMMEDIATE: 판매 시 전체 결제금액 기준으로 즉시 매출/정산 반영. USE_BASED: 1회 사용할 때마다 반영. */
+export type MembershipRecognitionMode = "SALE_IMMEDIATE" | "USE_BASED";
+
+export type MembershipPassStatus = "ACTIVE" | "DEPLETED" | "CLOSED";
+
+export interface MembershipPass {
+  id: string;
+  /** 식별명 (필수). 예: "김OO 클리닉 10회권". */
+  label: string;
+  purchaseDate: string;
+  /** 실결제금액. */
+  paidAmount: number;
+  /** 사용가능횟수 (전체). */
+  totalCount: number;
+  /** 남은 횟수. */
+  remainingCount: number;
+  recognitionMode: MembershipRecognitionMode;
+  status: MembershipPassStatus;
+  memo?: string;
+  createdAt: string;
+}
+
+export type MembershipEventType = "PURCHASE" | "USE" | "OTHER_DESIGNER_USE" | "ADJUSTMENT";
+
+/**
+ * 회원권 원장 이벤트. 정액권과 동일한 원칙 — 과거 이벤트는 수정하지 않고 새 이벤트를
+ * 추가해 이력을 유지한다. 남은 횟수는 이 이벤트들의 countImpact 합으로 재계산 가능해야 한다.
+ */
+export interface MembershipEvent {
+  id: string;
+  membershipPassId: string;
+  type: MembershipEventType;
+  date: string;
+  /** 남은 횟수(remainingCount)에 대한 영향. 구매는 +totalCount, 사용은 음수, 조정은 +/-N. */
+  countImpact: number;
+  /** 현재 디자이너 기준 매출 영향. */
+  salesImpact: number;
+  /** 현재 디자이너 기준 정산 영향 (이벤트 생성 당시 설정으로 계산해 고정한 snapshot 값). */
+  settlementImpact: number;
+  /** 이벤트 생성 당시 적용된 인센티브율 snapshot. ADJUSTMENT처럼 자동 계산이 없는 이벤트는 비워둔다. */
+  commissionRateSnapshot?: number;
+  /** USE/OTHER_DESIGNER_USE 이벤트에서만 채워지는 "1회 기준 매출"(paidAmount/totalCount) snapshot. */
+  perUseAmountSnapshot?: number;
+  memo?: string;
+  createdAt: string;
+}

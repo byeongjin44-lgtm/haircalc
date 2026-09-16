@@ -4,9 +4,9 @@
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { deletePrepaidPassFromStore } from "./storage.ts";
+import { deleteMembershipPassFromStore, deletePrepaidPassFromStore } from "./storage.ts";
 import { createMemoryStore } from "./recordStore.memory.ts";
-import type { PrepaidEvent, PrepaidPass } from "./types.ts";
+import type { MembershipEvent, MembershipPass, PrepaidEvent, PrepaidPass } from "./types.ts";
 
 function makePrepaidPass(overrides: Partial<PrepaidPass> = {}): PrepaidPass {
   return {
@@ -73,5 +73,79 @@ describe("E. deletePrepaidPassFromStore", () => {
     await deletePrepaidPassFromStore(store, "pass-only");
 
     assert.deepEqual(await store.getAll<PrepaidPass>("prepaidPasses"), []);
+  });
+});
+
+function makeMembershipPass(overrides: Partial<MembershipPass> = {}): MembershipPass {
+  return {
+    id: "membership-1",
+    label: "김OO 클리닉 10회권",
+    purchaseDate: "2026-09-01",
+    paidAmount: 500_000,
+    totalCount: 10,
+    remainingCount: 9,
+    recognitionMode: "USE_BASED",
+    status: "ACTIVE",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeMembershipEvent(overrides: Partial<MembershipEvent> = {}): MembershipEvent {
+  return {
+    id: "m-evt-1",
+    membershipPassId: "membership-1",
+    type: "PURCHASE",
+    date: "2026-09-01",
+    countImpact: 10,
+    salesImpact: 0,
+    settlementImpact: 0,
+    commissionRateSnapshot: 0.4,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("H. deleteMembershipPassFromStore", () => {
+  test("삭제 대상 pass와 연결된 이벤트만 제거하고 다른 pass/이벤트는 그대로 둔다", async () => {
+    const store = createMemoryStore();
+
+    await store.put("membershipPasses", makeMembershipPass({ id: "membership-1" }));
+    await store.put("membershipPasses", makeMembershipPass({ id: "membership-2" }));
+    await store.put(
+      "membershipEvents",
+      makeMembershipEvent({ id: "m-evt-1", membershipPassId: "membership-1" })
+    );
+    await store.put(
+      "membershipEvents",
+      makeMembershipEvent({ id: "m-evt-2", membershipPassId: "membership-1", type: "USE" })
+    );
+    await store.put(
+      "membershipEvents",
+      makeMembershipEvent({ id: "m-evt-3", membershipPassId: "membership-2" })
+    );
+
+    await deleteMembershipPassFromStore(store, "membership-1");
+
+    const remainingPasses = await store.getAll<MembershipPass>("membershipPasses");
+    const remainingEvents = await store.getAll<MembershipEvent>("membershipEvents");
+
+    assert.deepEqual(
+      remainingPasses.map((p) => p.id),
+      ["membership-2"]
+    );
+    assert.deepEqual(
+      remainingEvents.map((e) => e.id).sort(),
+      ["m-evt-3"]
+    );
+  });
+
+  test("이벤트가 없는 pass를 삭제해도 오류 없이 pass만 제거된다", async () => {
+    const store = createMemoryStore();
+    await store.put("membershipPasses", makeMembershipPass({ id: "membership-only" }));
+
+    await deleteMembershipPassFromStore(store, "membership-only");
+
+    assert.deepEqual(await store.getAll<MembershipPass>("membershipPasses"), []);
   });
 });

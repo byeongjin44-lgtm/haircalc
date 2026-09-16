@@ -2,6 +2,9 @@ import type {
   BonusSettlementMode,
   CustomerType,
   MaterialCostMode,
+  MembershipEventType,
+  MembershipPassStatus,
+  MembershipRecognitionMode,
   PaymentType,
   PrepaidDiscountSettlementBasis,
   PrepaidEventType,
@@ -128,6 +131,32 @@ export const PREPAID_EVENT_TYPE_LABELS: Record<PrepaidEventType, string> = {
 };
 
 export const PREPAID_PASS_STATUS_LABELS: Record<PrepaidPassStatus, string> = {
+  ACTIVE: "사용 가능",
+  DEPLETED: "소진",
+  CLOSED: "종료",
+};
+
+// --- 회원권 (횟수 차감형) ---
+
+/** 화면 표시 순서. 신규 등록 폼 기본값(USE_BASED)은 이 순서와 무관하게 유지된다. */
+export const MEMBERSHIP_RECOGNITION_MODES: readonly MembershipRecognitionMode[] = [
+  "USE_BASED",
+  "SALE_IMMEDIATE",
+];
+
+export const MEMBERSHIP_RECOGNITION_MODE_LABELS: Record<MembershipRecognitionMode, string> = {
+  SALE_IMMEDIATE: "판매 즉시 반영",
+  USE_BASED: "사용 시 반영",
+};
+
+export const MEMBERSHIP_EVENT_TYPE_LABELS: Record<MembershipEventType, string> = {
+  PURCHASE: "회원권 구매",
+  USE: "본인 사용",
+  OTHER_DESIGNER_USE: "타 디자이너 사용",
+  ADJUSTMENT: "조정",
+};
+
+export const MEMBERSHIP_PASS_STATUS_LABELS: Record<MembershipPassStatus, string> = {
   ACTIVE: "사용 가능",
   DEPLETED: "소진",
   CLOSED: "종료",

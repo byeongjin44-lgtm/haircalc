@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { FieldError, fieldBorderClass } from "@/components/FieldError";
 import { useSuccessOverlay } from "@/components/SuccessOverlay";
+import { useFieldRefs } from "@/components/useFieldRefs";
 import { calculateDiscountedServiceAmount, purchasePrepaidPass } from "@/lib/settlement/prepaid";
 import {
   BONUS_SETTLEMENT_MODES,
@@ -14,7 +15,13 @@ import {
   PREPAID_RECOGNITION_MODES,
   PREPAID_RECOGNITION_MODE_LABELS,
 } from "@/lib/settlement/labels";
-import { applyBonusRate, formatWon, percentToRate, todayDateString } from "@/lib/settlement/format";
+import {
+  applyBonusRate,
+  formatWon,
+  normalizeAmountInput,
+  percentToRate,
+  todayDateString,
+} from "@/lib/settlement/format";
 import { loadSettlementSettings, recordPrepaidLedgerResult } from "@/lib/settlement/storage";
 import type {
   BonusSettlementMode,
@@ -76,6 +83,15 @@ type PrepaidNewFieldErrors = {
   discountRate?: string;
 };
 
+/** 화면에 보이는 순서(위→아래)와 반드시 일치해야 한다. 첫 오류 필드로 scroll+focus할 때 쓴다. */
+const PREPAID_NEW_FIELD_ORDER: readonly (keyof PrepaidNewFieldErrors)[] = [
+  "date",
+  "label",
+  "paidAmount",
+  "creditAmount",
+  "discountRate",
+];
+
 /**
  * 신규 등록 폼의 초기값. 날짜(오늘)만 매 리셋 시점에 다시 계산해야 해서 별도로 다룬다.
  * resetForm()과 useState 초기값이 이 한 곳만 바라보게 해, "화면 선택 상태 = 실제 state"가
@@ -136,6 +152,7 @@ export default function PrepaidNewPage() {
   const [memo, setMemo] = useState(INITIAL_PREPAID_NEW_FORM.memo);
   const [fieldErrors, setFieldErrors] = useState<PrepaidNewFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const { register, focusFirstError } = useFieldRefs<keyof PrepaidNewFieldErrors>();
 
   /** 폼을 초기 상태로 되돌린다. 날짜는 "오늘"이라 호출 시점에 다시 계산한다. */
   function resetForm() {
@@ -166,6 +183,7 @@ export default function PrepaidNewPage() {
   }, []);
 
   const paidAmount = Number(paidAmountText);
+  const isPaidAmountValid = Number.isFinite(paidAmount) && paidAmount > 0;
   const creditAmount = Number(creditAmountText);
   const discountRatePercent = Number(discountRateText);
   const isDiscountRateValid =
@@ -173,13 +191,28 @@ export default function PrepaidNewPage() {
   const discountRate = isDiscountRateValid ? percentToRate(discountRateText) : 0;
   const hasDiscount = isDiscountRateValid && discountRate > 0;
 
-  function handlePaidAmountChange(value: string) {
+  function handlePaidAmountChange(rawValue: string) {
+    const value = normalizeAmountInput(rawValue);
     setPaidAmountText(value);
-    if (!creditTouched) setCreditAmountText(value);
+
+    const nextPaidAmount = Number(value);
+    const nextValid = value.trim() !== "" && Number.isFinite(nextPaidAmount) && nextPaidAmount > 0;
+
+    if (!nextValid) {
+      // 실결제금액이 없어지면 보너스 선택(과 그에 따라 자동 계산됐던 사용가능금액)을
+      // 안전하게 초기화한다 — 사용자가 직접 입력한 값이 이상하게 남지 않게 한다.
+      setBonusRateText(INITIAL_PREPAID_NEW_FORM.bonusRateText);
+      setCreditAmountText(INITIAL_PREPAID_NEW_FORM.creditAmountText);
+      setCreditTouched(INITIAL_PREPAID_NEW_FORM.creditTouched);
+    } else if (!creditTouched) {
+      setCreditAmountText(value);
+    }
+
     setFieldErrors((prev) => ({ ...prev, paidAmount: undefined }));
   }
 
-  function handleCreditAmountChange(value: string) {
+  function handleCreditAmountChange(rawValue: string) {
+    const value = normalizeAmountInput(rawValue);
     setCreditAmountText(value);
     setCreditTouched(true);
     setFieldErrors((prev) => ({ ...prev, creditAmount: undefined }));
@@ -227,7 +260,10 @@ export default function PrepaidNewPage() {
     const errors = validatePrepaidNew();
     setFieldErrors(errors);
     setFormError(null);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstError(errors, PREPAID_NEW_FIELD_ORDER);
+      return;
+    }
 
     const now = new Date().toISOString();
     const result = purchasePrepaidPass(
@@ -271,6 +307,7 @@ export default function PrepaidNewPage() {
         <label className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">등록일</span>
           <input
+            ref={register("date")}
             type="date"
             value={date}
             onChange={(e) => {
@@ -285,6 +322,7 @@ export default function PrepaidNewPage() {
         <label className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">정액권 식별명 *</span>
           <input
+            ref={register("label")}
             type="text"
             placeholder="예: OO고객 100만원권"
             value={label}
@@ -300,6 +338,7 @@ export default function PrepaidNewPage() {
         <label className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">실결제금액</span>
           <input
+            ref={register("paidAmount")}
             type="number"
             inputMode="numeric"
             min={0}
@@ -316,6 +355,7 @@ export default function PrepaidNewPage() {
             사용가능금액 (보너스 포함, 기본값은 실결제금액과 동일)
           </span>
           <input
+            ref={register("creditAmount")}
             type="number"
             inputMode="numeric"
             min={0}
@@ -328,11 +368,14 @@ export default function PrepaidNewPage() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm text-zinc-500">보너스</span>
+          <span className="text-sm text-zinc-500">
+            보너스{!isPaidAmountValid && " (실결제금액을 먼저 입력해주세요)"}
+          </span>
           <select
             value={bonusRateText}
+            disabled={!isPaidAmountValid}
             onChange={(e) => handleBonusRateChange(e.target.value)}
-            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2"
+            className="min-h-[44px] rounded-lg border border-zinc-200 px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {BONUS_RATE_OPTIONS.map((option) => (
               <option key={option.rate} value={option.rate}>
@@ -411,6 +454,7 @@ export default function PrepaidNewPage() {
           </div>
           {discountCustomMode && (
             <input
+              ref={register("discountRate")}
               type="number"
               inputMode="decimal"
               min={0}

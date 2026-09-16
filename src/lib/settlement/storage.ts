@@ -10,7 +10,10 @@ import { clearLegacyLocalStorage, ensureMigrated } from "./migration.ts";
 import { indexedDbStore } from "./recordStore.indexeddb.ts";
 import { STORE_NAMES, type RecordStore } from "./recordStore.ts";
 import type { PrepaidLedgerResult } from "./prepaid.ts";
+import type { MembershipLedgerResult } from "./membership.ts";
 import type {
+  MembershipEvent,
+  MembershipPass,
   MonthlyActualPayout,
   PrepaidEvent,
   PrepaidPass,
@@ -132,6 +135,61 @@ export async function deletePrepaidPass(passId: string): Promise<void> {
   if (!isBrowser()) return;
   const store = await ready();
   await deletePrepaidPassFromStore(store, passId);
+}
+
+// --- 회원권 (횟수 차감형) ---
+
+export async function loadMembershipPasses(): Promise<MembershipPass[]> {
+  if (!isBrowser()) return [];
+  const store = await ready();
+  return store.getAll<MembershipPass>("membershipPasses");
+}
+
+export async function upsertMembershipPass(pass: MembershipPass): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await store.put("membershipPasses", pass);
+}
+
+export async function loadMembershipEvents(): Promise<MembershipEvent[]> {
+  if (!isBrowser()) return [];
+  const store = await ready();
+  return store.getAll<MembershipEvent>("membershipEvents");
+}
+
+export async function appendMembershipEvent(event: MembershipEvent): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await store.put("membershipEvents", event);
+}
+
+/** membership.ts의 각 함수가 반환하는 {pass, event}를 그대로 저장한다 (과거 이벤트는 절대 덮어쓰지 않음). */
+export async function recordMembershipLedgerResult(result: MembershipLedgerResult): Promise<void> {
+  await upsertMembershipPass(result.pass);
+  await appendMembershipEvent(result.event);
+}
+
+/**
+ * 회원권 삭제 로직 (store를 인자로 받아 Node 테스트에서도 검증 가능). pass와 그에 연결된
+ * 모든 MembershipEvent를 함께 지운다 — 둘 중 하나만 남으면 원장이 깨지므로 항상 같이 지운다.
+ */
+export async function deleteMembershipPassFromStore(
+  store: RecordStore,
+  passId: string
+): Promise<void> {
+  const events = await store.getAll<MembershipEvent>("membershipEvents");
+  for (const event of events) {
+    if (event.membershipPassId === passId) {
+      await store.delete("membershipEvents", event.id);
+    }
+  }
+  await store.delete("membershipPasses", passId);
+}
+
+export async function deleteMembershipPass(passId: string): Promise<void> {
+  if (!isBrowser()) return;
+  const store = await ready();
+  await deleteMembershipPassFromStore(store, passId);
 }
 
 /** 전체 데이터를 하나의 JSON 백업 객체로 만든다 (/settings의 "백업 파일 내보내기"). */

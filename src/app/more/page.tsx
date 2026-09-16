@@ -3,6 +3,7 @@ import InstallPwaButton from "@/components/InstallPwaButton";
 
 const MORE_LINKS = [
   { href: "/history", label: "내역", description: "저장된 거래 목록 확인" },
+  { href: "/membership", label: "회원권", description: "횟수 차감형 회원권 관리" },
   { href: "/settings", label: "설정", description: "정산 설정, 백업/복원, 데이터 관리" },
 ] as const;
 

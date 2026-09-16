@@ -1,7 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createDefaultSettlementSettings } from "./engine.ts";
-import { BACKUP_VERSION, SCHEMA_VERSION, buildBackup, restoreBackup, validateBackup } from "./backup.ts";
+import {
+  BACKUP_VERSION,
+  SCHEMA_VERSION,
+  buildBackup,
+  restoreBackup,
+  validateBackup,
+  type BackupData,
+} from "./backup.ts";
 import { migrateLegacyDataIfNeeded, type LegacyLocalStorageData } from "./migration.ts";
 import { createMemoryStore } from "./recordStore.memory.ts";
 import { DATA_STORE_NAMES } from "./recordStore.ts";
@@ -166,5 +173,43 @@ describe("I. 지원하지 않는 version 차단", () => {
     const store = await seededStore();
     const backup = await buildBackup(store);
     assert.equal(validateBackup({ ...backup, schemaVersion: SCHEMA_VERSION + 1 }), false);
+  });
+});
+
+describe("J. 회원권 이전(schemaVersion 1) 백업도 정상 복원된다", () => {
+  test("membershipPasses/membershipEvents 필드가 아예 없어도 통과/정상 복원된다", async () => {
+    const store = await seededStore();
+    const fullBackup = await buildBackup(store);
+
+    // 회원권 필드가 아예 없는 구버전 백업을 흉내낸다 (schemaVersion 1 시절 실제 포맷).
+    const legacyBackup = { ...fullBackup, schemaVersion: 1 } as Record<string, unknown>;
+    delete legacyBackup.membershipPasses;
+    delete legacyBackup.membershipEvents;
+
+    assert.equal(validateBackup(legacyBackup), true);
+
+    await restoreBackup(store, legacyBackup as unknown as BackupData);
+
+    assert.deepEqual(await store.getAll("membershipPasses"), []);
+    assert.deepEqual(await store.getAll("membershipEvents"), []);
+    // 나머지 데이터는 정상적으로 복원된다.
+    assert.equal((await store.getAll<Transaction>("transactions")).length, 1);
+  });
+
+  test("membershipPasses/membershipEvents가 배열이 아니면 거부한다", () => {
+    assert.equal(
+      validateBackup({
+        backupVersion: 1,
+        schemaVersion: 1,
+        exportedAt: "2026-09-15T00:00:00.000Z",
+        settings: {},
+        transactions: [],
+        prepaidPasses: [],
+        prepaidEvents: [],
+        monthlyActualPayouts: [],
+        membershipPasses: "not-an-array",
+      }),
+      false
+    );
   });
 });

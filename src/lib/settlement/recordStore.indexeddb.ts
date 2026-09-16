@@ -6,7 +6,11 @@
 import { STORE_KEY_PATHS, STORE_NAMES, type RecordStore, type StoreName } from "./recordStore.ts";
 
 const DB_NAME = "haircalc";
-const DB_VERSION = 1;
+// v2: 회원권(membershipPasses/membershipEvents) object store 추가. 버전을 올려야
+// 기존 사용자의 브라우저에서도 onupgradeneeded가 다시 실행되어 새 store가 생성된다.
+// 기존 store는 `if (!db.objectStoreNames.contains(name))`로 건너뛰므로 기존 데이터는
+// 그대로 보존된다.
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 

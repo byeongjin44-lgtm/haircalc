@@ -8,6 +8,8 @@ export type StoreName =
   | "prepaidPasses"
   | "prepaidEvents"
   | "monthlyActualPayouts"
+  | "membershipPasses"
+  | "membershipEvents"
   | "meta";
 
 /** 실제 정산 데이터가 들어있는 store (meta 제외). "IndexedDB가 비어있는가" 판단 등에 쓴다. */
@@ -17,6 +19,8 @@ export const DATA_STORE_NAMES: readonly StoreName[] = [
   "prepaidPasses",
   "prepaidEvents",
   "monthlyActualPayouts",
+  "membershipPasses",
+  "membershipEvents",
 ];
 
 export const STORE_NAMES: readonly StoreName[] = [...DATA_STORE_NAMES, "meta"];
@@ -27,6 +31,8 @@ export const STORE_KEY_PATHS: Record<StoreName, string> = {
   prepaidPasses: "id",
   prepaidEvents: "id",
   monthlyActualPayouts: "month",
+  membershipPasses: "id",
+  membershipEvents: "id",
   meta: "key",
 };
 

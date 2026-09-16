@@ -2,14 +2,15 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-09-15
+마지막 업데이트: 2026-09-16
 
 작업 브랜치 안내: main은 실사용자 Production 안정판이다. 정액권 stale state 버그 수정
 + 앱 내 사용 설명서 PART까지는 dev에서 검증 후 main에 fast-forward merge + push
-완료되어 main/origin main은 `4bd72c6`에 고정되어 있다. 정액권 사용 할인율 PART는
-`dev`에서 검증 후 commit `7fc9422`로 `dev`/`origin dev`에 push 완료했다(main에는
-아직 병합/push하지 않음). 이번 정액권 신규등록 UX PART(기본값 변경 + 할인율 직접입력
-UI)는 `7fc9422` 위에서 다시 `dev`에서만 작업 중이며 **아직 커밋하지 않았다**(사용자
+완료되어 main/origin main은 `4bd72c6`에 고정되어 있다. 정액권 사용 할인율 PART(commit
+`7fc9422`)와 정액권 신규등록 UX 개선 PART(기본값 변경 + 할인율 직접입력 UI, commit
+`688e41b`)는 `dev`에서 검증 후 `dev`/`origin dev`에 push 완료했다(main에는 아직
+병합/push하지 않음). 이번 PART A(금액 입력/validation UX 개선) + PART B(회원권 신규
+기능)는 `688e41b` 위에서 다시 `dev`에서만 작업 중이며 **아직 커밋하지 않았다**(사용자
 명시 지시, main 수정/merge/push 금지, 커밋도 보류).
 
 ## 1. 현재 상태
@@ -17,11 +18,139 @@ UI)는 `7fc9422` 위에서 다시 `dev`에서만 작업 중이며 **아직 커�
 상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
 실기기 UX 개선(설치 흐름/저장 피드백) 완료 + 저장 성공 피드백/입력 오류 인라인 표시 완료 +
 정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 + 정액권 삭제 + 환불 전액 버튼 +
-앱 내 사용 설명서 완료(main 반영됨) + 정액권 사용 할인율 지원 완료(dev 커밋 `7fc9422`,
-main 미병합) + **(dev 브랜치, 미커밋) 정액권 신규등록 UX 개선(기본값 변경 + 할인율
-직접입력 UI) 완료** / 다음 단계: 실기기 확인 → 커밋/push → main 병합 → 실제 배포(Vercel)
+앱 내 사용 설명서 완료 + 정액권 사용 할인율 지원 완료 + 정액권 신규등록 UX 개선 완료
+(위 전부 dev/origin dev 커밋 `688e41b`까지 반영, main 미병합) + **(dev 브랜치, 미커밋)
+금액 입력 선행 0 방지/보너스 활성화 조건/validation 오류 포커스 개선(PART A) + 횟수
+차감형 회원권 신규 기능(PART B) 완료** / 다음 단계: 실기기 확인 → 커밋/push → main
+병합 → 실제 배포(Vercel)
 
-**정액권 신규등록 UX 개선 (2026-09-15, dev 브랜치, commit `7fc9422` 위, 미커밋)**:
+**PART A — 금액 입력 / validation UX 개선 (2026-09-16, dev 브랜치, `688e41b` 위, 미커밋)**:
+`/prepaid/new`와 `/entry`의 입력 UX만 개선했다. 계산 엔진/정산 공식/데이터 모델은
+전혀 건드리지 않았고, 기존 91개 테스트(PART 직전 기준)는 수정 없이 그대로 통과한다.
+
+1. **금액 입력 선행 0 방지**: `format.ts`에 `normalizeAmountInput(value)` 순수함수
+   하나를 추가했다 — 정규식 `/^0+(?=\d)/`로 "다음에 숫자가 더 오는 선행 0"만 제거한다
+   ("00010000"→"10000", "0500"→"500"). 단독 "0"과 빈 문자열, 중간/끝의 0, 소수점
+   이하는 그대로 둔다. `/prepaid/new`의 실결제금액/사용가능금액, `/entry`의 결제·시술
+   금액(정액권 사용 시 "정상 시술가"로도 재사용되는 동일 필드) `onChange`에서 이 helper
+   하나만 재사용했다 — 필드마다 regex를 새로 쓰지 않았다. `format.test.ts`에 7개
+   케이스를 추가해 검증했다.
+2. **보너스 활성화 조건**: `/prepaid/new`에서 실결제금액이 비어있거나 0 이하/유효하지
+   않으면 보너스 `<select>`(빠른 선택 없음/5/10/15/20/30%)를 `disabled`로 잠근다(코드상
+   실제 컴포넌트는 버튼이 아니라 select라 그 구조를 그대로 유지하고 disabled 처리만
+   추가했다). `handlePaidAmountChange`를 고쳐, 실결제금액이 무효해지는 순간
+   `bonusRateText`/`creditAmountText`/`creditTouched`를 전부 초기값으로 되돌린다 —
+   나중에 실결제금액을 다시 입력해도 이전에 자동계산됐던 사용가능금액이 이상하게 남지
+   않는다. 보너스 계산 로직(`applyBonusRate` 등) 자체는 무수정.
+3. **validation 오류 → 첫 필드로 scroll + focus**: 공용 hook
+   `src/components/useFieldRefs.ts`(신규 파일)를 만들어 `/prepaid/new`·`/entry`
+   양쪽에서 재사용했다. `register(key)`를 input/select의 `ref`로 연결하고, 저장 실패
+   시 `focusFirstError(errors, FIELD_ORDER)`를 호출하면 `FIELD_ORDER`(화면 표시 순서와
+   일치하는 배열) 중 실제 오류가 있는 첫 필드에 `scrollIntoView({behavior:"smooth",
+   block:"center"})` + `focus({preventScroll:true})`를 함께 수행한다. `window.scrollTo`
+   좌표 계산 없이 항상 element 기준으로 동작해 모바일 키보드 환경에서도 안전하다.
+   `ChoiceGroup`(버튼 여러 개로 된 커스텀 필드)은 `containerRef` prop을 추가해
+   `tabIndex={-1}` wrapper를 register 대상으로 썼다(개별 버튼 tab 순서는 건드리지
+   않음). `/prepaid/new`는 date→label→paidAmount→creditAmount→discountRate,
+   `/entry`는 date→amount→customerType→serviceType→paymentType→prepaidPass 순서로
+   등록했다. 수정 후 다시 저장하면 그다음 첫 오류로 자연스럽게 다시 이동한다(별도
+   상태 없이 매번 현재 errors 기준으로 재계산하는 구조라 자동으로 성립).
+
+검증: `npm run lint` 통과 / `npm test` **91/91 통과**(PART A 직전 84개 + 신규 7개,
+전부 무수정 통과) / `npm run build` 정상.
+
+**PART B — 횟수 차감형 회원권 신규 기능 (2026-09-16, dev 브랜치, PART A 위, 미커밋)**:
+정액권과 별개의 신규 상품 타입을 처음부터 만들었다. 정액권 타입/계산식은 단 한 줄도
+수정하지 않았고(`prepaid.ts`/`engine.ts`/`prepaid.test.ts` 전부 무변경), 기존 91개
+테스트는 그대로 통과한다.
+
+1. **데이터 모델(`types.ts`)**: `MembershipPass`(id/label/purchaseDate/paidAmount/
+   totalCount/remainingCount/recognitionMode/status/memo/createdAt)와
+   `MembershipEvent`(membershipPassId/type/date/countImpact/salesImpact/
+   settlementImpact/commissionRateSnapshot?/perUseAmountSnapshot?/memo/createdAt)를
+   정액권 타입과 완전히 분리해 새로 정의했다. `MembershipEventType`은
+   `PURCHASE`/`USE`/`OTHER_DESIGNER_USE`/`ADJUSTMENT` 4종(정액권과 달리 `REFUND`
+   없음 — 지시된 최소 이벤트 목록 그대로).
+2. **계산 엔진(`membership.ts`, 신규 파일)**: `prepaid.ts`와 동일한 원칙(순수 함수,
+   VAT/카드수수료/재료비 미적용, `settings.baseIncentiveRate`만 사용)으로 독립
+   구현했다. `calculatePerUseAmount(paidAmount, totalCount) = round(paidAmount /
+   totalCount)`. `purchaseMembershipPass`(SALE_IMMEDIATE만 구매 즉시 전체 반영,
+   USE_BASED는 0) / `useOwnMembershipCount`(USE_BASED만 1회당 perUseAmount×count
+   반영, SALE_IMMEDIATE는 이미 반영됐으므로 0 — 중복 정산 없음) /
+   `useByOtherDesigner`(SALE_IMMEDIATE만 환수, USE_BASED는 영향 없음 — 정액권
+   `useByOtherDesigner`와 정책 대칭) / `adjustMembershipPass`(countImpact가 0 미만
+   또는 totalCount 초과가 되는 조정은 차단) / `calculateRemainingCountFromEvents`
+   (이벤트 이력 합으로 재계산, 잔액 검증용). 정산 반영 방식 기본값은 정액권 신규등록
+   폼과 동일하게 `USE_BASED`.
+3. **원장(Event Ledger) 원칙**: 정액권과 동일 — 과거 이벤트를 수정하지 않고 새
+   이벤트만 추가한다. `remainingCount`는 이벤트 `countImpact` 합으로 항상 재계산
+   가능하다(테스트로 검증). "타 디자이너 사용"은 다른 디자이너의 급여를 계산하지
+   않고 현재 사용자 정산에 필요한 조정만 기록한다(정액권과 동일 원칙).
+4. **IndexedDB**: `recordStore.ts`의 `StoreName`/`DATA_STORE_NAMES`/
+   `STORE_KEY_PATHS`에 `membershipPasses`/`membershipEvents`(둘 다 keyPath "id")를
+   추가했다. `recordStore.indexeddb.ts`의 `DB_VERSION`을 1→2로 올려 기존 사용자
+   브라우저에서도 `onupgradeneeded`가 다시 실행되게 했다 — 기존 store는
+   `objectStoreNames.contains()` 가드로 건너뛰므로 기존 `transactions`/
+   `prepaidPasses`/`prepaidEvents`/`settings`/`monthlyActualPayouts` 데이터는
+   전혀 손실되지 않는다(신규 store 2개만 추가로 생성). `migration.ts`(legacy
+   localStorage→IndexedDB 이전 로직)는 회원권이 legacy 시절에 존재한 적이 없어
+   무수정 — `isStoreEmpty` 등은 `DATA_STORE_NAMES`를 동적으로 순회하는 기존 구조라
+   자동으로 새 store 2개도 포함해 검사한다.
+5. **저장 계층(`storage.ts`)**: `loadMembershipPasses`/`upsertMembershipPass`/
+   `loadMembershipEvents`/`appendMembershipEvent`/`recordMembershipLedgerResult`
+   (prepaid의 `recordPrepaidLedgerResult`와 동일 패턴)/
+   `deleteMembershipPassFromStore`(+ `deleteMembershipPass`, pass와 연결된 이벤트를
+   함께 삭제 — 정액권 삭제와 동일 원칙)를 추가했다. `wipeAllData`는 이미
+   `STORE_NAMES`를 순회하는 구조라 수정 없이 회원권도 함께 삭제된다.
+6. **Backup/Restore(`backup.ts`)**: `BackupData`에 `membershipPasses?`/
+   `membershipEvents?`를 **optional**로 추가하고 `SCHEMA_VERSION`을 1→2로 올렸다
+   (`BACKUP_VERSION`은 envelope 구조 변경이 아니라 유지). `validateBackup`은 두
+   필드가 아예 없어도 통과시키고(구버전 백업 호환), 있는데 배열이 아니면 차단한다.
+   `restoreBackup`은 `data.membershipPasses ?? []`로 읽어 구버전 백업 복원 시
+   회원권 store를 빈 배열로 정상 복원한다(테스트로 검증). `buildBackup`은 항상 현재
+   회원권 데이터를 포함해 내보낸다.
+7. **월정산 연동(`summary.ts`)**: 기존 `combinePeriodSummary(transactions,
+   prepaidEvents)`는 시그니처/동작을 전혀 바꾸지 않았다(`prepaid-integration.test.ts`
+   가 이 2-인자 시그니처를 그대로 쓰고 있어 깨지면 안 됨). 대신
+   `summarizeMembershipEvents`/`filterMembershipEventsByMonth`/
+   `filterMembershipEventsByDate`/`groupMembershipEventsByDate`를 정액권과 동일한
+   패턴으로 추가하고, `combineFullPeriodSummary(transactions, prepaidEvents,
+   membershipEvents)`가 기존 `combinePeriodSummary` 결과 위에 회원권 영향만 더
+   얹는 방식으로 확장했다(중복 계산 공식 없음). 홈(`/`)·월정산(`/settlement`, 달력
+   셀 포함)·일별 상세(`/settlement/[date]`) 3개 화면 전부 이 함수로 교체해 총매출/
+   예상 정산액에 회원권 영향이 자동으로 합산된다. 일별 상세에는 정액권과 동일한
+   모양의 "회원권" 이벤트 목록 섹션도 추가했다.
+8. **신규 route/UI**: `/membership`(목록 — 금액보다 "남은횟수/전체횟수"를 크게
+   강조), `/membership/new`(등록 — 식별명*/등록일*/실결제금액*/사용가능횟수*/정산
+   반영방식/메모, 선행 0 방지 + validation 포커스 이동까지 PART A 패턴 그대로 재사용),
+   `/membership/[id]`(상세 — [1회 사용]/[타 디자이너 사용]/[횟수 조정] 3개 액션 +
+   이벤트 이력 + 회원권 삭제(연결 이벤트 함께 삭제, 확인 오버레이)). "1회 사용"은
+   MVP 기준 1회 고정 버튼으로만 구현했다(여러 회차 입력 UI는 만들지 않음 — 엔진
+   함수 자체는 `count` 인자를 받아 이미 대응 가능하니 나중에 UI만 추가해도 된다).
+   진입 경로: `/more`에 "회원권" 행 추가 + `/prepaid` 헤더에 "회원권" 상호 링크
+   (하단 tab은 추가하지 않고, `BottomNav`의 "정액권" 탭 activePaths에 `/membership`을
+   포함시켜 회원권 화면에서도 그 탭이 강조되게 했다).
+9. **`/entry` 연동**: 결제수단에 "회원권"을 추가했다(`PaymentChoice`에 `"MEMBERSHIP"`
+   추가, 엔진의 `PaymentType`에는 없는 UI 전용 값 — 정액권과 동일 패턴). 회원권
+   선택 시 금액 입력 자체를 숨기고(횟수 차감형이라는 점을 명확히 하기 위해) 활성
+   회원권을 고르면 1회 사용으로 고정 처리된다. 저장 전 미리보기(정산 반영 매출/정산
+   영향/사용 후 남은 횟수)도 정액권과 동일한 패턴으로 보여준다.
+10. **사용 설명서(`/settings/guide`)**: "L. 회원권" 섹션을 추가해 "정액권은 금액을
+    차감, 회원권은 횟수를 차감"이라는 핵심 차이와 사용 시 반영/판매 즉시 반영 차이를
+    설명했다. 기존 A~K 섹션은 무변경. "아직 구현되지 않은 기능은 넣지 않는다"는
+    안내 주석에서 이제 구현된 "횟수형 회원권"이라는 옛 문구만 정리했다(설명 문구
+    자체는 무변경).
+
+검증: `npm run lint` 통과 / `npm test` **115/115 통과**(PART A 직전 91개 전부 무수정
+통과 + 신규 24개: `membership.test.ts` engine 테스트 A~G급(1회 기준 매출/USE_BASED
+purchase·use/SALE_IMMEDIATE 중복정산없음/9→10회 차감/0회 사용 차단/CLOSED 사용 차단/
+타디자이너 사용 두 모드/±1 조정과 범위 차단/이벤트로 잔여횟수 재계산) + `storage.test.ts`
+"H. deleteMembershipPassFromStore" 2개 + `backup.test.ts` "J. 회원권 이전 백업 호환"
+2개 + `summary.test.ts` "J. combineFullPeriodSummary" 2개) / `npm run build` 정상
+완료 — `/membership`·`/membership/new`는 "○ Static", `/membership/[id]`는 기존
+`/prepaid/[id]`와 동일하게 "ƒ Dynamic"으로 생성됨.
+
+**정액권 신규등록 UX 개선 (2026-09-15, dev 브랜치, commit `688e41b`, main 미병합)**:
 `/prepaid/new`(신규 정액권 등록 화면) 한 곳만 수정했다. 계산 엔진(`prepaid.ts`의
 계산 함수 전부) / 데이터 모델(`types.ts`) / IndexedDB / 기존 정액권 데이터는 전혀
 건드리지 않았고, 기존 84개 테스트가 수정 없이 그대로 통과한다.

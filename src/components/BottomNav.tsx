@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { href: "/", label: "홈", activePaths: ["/"] },
   { href: "/entry", label: "등록", activePaths: ["/entry"] },
   { href: "/settlement", label: "월정산", activePaths: ["/settlement"] },
-  { href: "/prepaid", label: "정액권", activePaths: ["/prepaid"] },
+  { href: "/prepaid", label: "정액권", activePaths: ["/prepaid", "/membership"] },
   { href: "/more", label: "더보기", activePaths: ["/more", "/history", "/settings"] },
 ] as const;
 

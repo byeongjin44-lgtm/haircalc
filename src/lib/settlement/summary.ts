@@ -3,7 +3,7 @@
 // 현재 SettlementSettings로 재계산하지 않는다.
 
 import { monthKeyOf } from "./month.ts";
-import type { PrepaidEvent, Transaction } from "./types.ts";
+import type { MembershipEvent, PrepaidEvent, Transaction } from "./types.ts";
 
 export interface PeriodSummary {
   totalAmount: number;
@@ -124,5 +124,70 @@ export function combinePeriodSummary(
     totalAmount: transactionSummary.totalAmount + prepaidImpact.salesImpact,
     totalSettlementAmount:
       transactionSummary.totalSettlementAmount + prepaidImpact.settlementImpact,
+  };
+}
+
+// --- 회원권 이벤트 집계 ---
+// 정액권과 동일한 원칙 — "이벤트 발생일(date)" 기준으로 월/일에 귀속시키고, 과거 이벤트는
+// 수정하지 않는다.
+
+export function filterMembershipEventsByMonth(
+  events: MembershipEvent[],
+  monthKey: string
+): MembershipEvent[] {
+  return events.filter((event) => monthKeyOf(event.date) === monthKey);
+}
+
+export function filterMembershipEventsByDate(
+  events: MembershipEvent[],
+  date: string
+): MembershipEvent[] {
+  return events.filter((event) => event.date === date);
+}
+
+export function groupMembershipEventsByDate(
+  events: MembershipEvent[]
+): Record<string, MembershipEvent[]> {
+  const grouped: Record<string, MembershipEvent[]> = {};
+  for (const event of events) {
+    (grouped[event.date] ??= []).push(event);
+  }
+  return grouped;
+}
+
+export interface MembershipImpactSummary {
+  salesImpact: number;
+  settlementImpact: number;
+}
+
+export function summarizeMembershipEvents(events: MembershipEvent[]): MembershipImpactSummary {
+  return {
+    salesImpact: events.reduce((sum, event) => sum + event.salesImpact, 0),
+    settlementImpact: events.reduce((sum, event) => sum + event.settlementImpact, 0),
+  };
+}
+
+/**
+ * 일반 Transaction + 정액권 이벤트 + 회원권 이벤트를 모두 합친 최종 매출/정산액.
+ * 별도의 월정산 계산 공식을 새로 만들지 않고 combinePeriodSummary(거래+정액권)에
+ * 회원권 영향만 더 얹는 방식으로 확장한다 — 세 원장 중 어느 것도 재계산하지 않는다.
+ */
+export interface FullPeriodSummary extends CombinedPeriodSummary {
+  membershipImpact: MembershipImpactSummary;
+}
+
+export function combineFullPeriodSummary(
+  transactions: Transaction[],
+  prepaidEvents: PrepaidEvent[],
+  membershipEvents: MembershipEvent[]
+): FullPeriodSummary {
+  const combined = combinePeriodSummary(transactions, prepaidEvents);
+  const membershipImpact = summarizeMembershipEvents(membershipEvents);
+
+  return {
+    ...combined,
+    membershipImpact,
+    totalAmount: combined.totalAmount + membershipImpact.salesImpact,
+    totalSettlementAmount: combined.totalSettlementAmount + membershipImpact.settlementImpact,
   };
 }

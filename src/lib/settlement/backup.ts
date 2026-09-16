@@ -4,6 +4,8 @@ import { createDefaultSettlementSettings } from "./engine.ts";
 import { DATA_STORE_NAMES, type RecordStore } from "./recordStore.ts";
 import { setMigrationFlag } from "./migration.ts";
 import type {
+  MembershipEvent,
+  MembershipPass,
   MonthlyActualPayout,
   PrepaidEvent,
   PrepaidPass,
@@ -12,7 +14,9 @@ import type {
 } from "./types.ts";
 
 export const BACKUP_VERSION = 1;
-export const SCHEMA_VERSION = 1;
+// v2: membershipPasses/membershipEvents 필드 추가 (회원권 기능). 두 필드는 optional이라
+// schemaVersion 1(회원권 이전) 백업도 그대로 읽힌다 — validateBackup/restoreBackup 참고.
+export const SCHEMA_VERSION = 2;
 
 export interface BackupData {
   backupVersion: number;
@@ -23,17 +27,29 @@ export interface BackupData {
   prepaidPasses: PrepaidPass[];
   prepaidEvents: PrepaidEvent[];
   monthlyActualPayouts: MonthlyActualPayout[];
+  /** schemaVersion 1(회원권 이전) 백업에는 이 필드가 없다 — 없으면 빈 배열로 취급한다. */
+  membershipPasses?: MembershipPass[];
+  membershipEvents?: MembershipEvent[];
 }
 
 export async function buildBackup(store: RecordStore): Promise<BackupData> {
-  const [settings, transactions, prepaidPasses, prepaidEvents, monthlyActualPayouts] =
-    await Promise.all([
-      store.get<SettlementSettings>("settings", "default"),
-      store.getAll<Transaction>("transactions"),
-      store.getAll<PrepaidPass>("prepaidPasses"),
-      store.getAll<PrepaidEvent>("prepaidEvents"),
-      store.getAll<MonthlyActualPayout>("monthlyActualPayouts"),
-    ]);
+  const [
+    settings,
+    transactions,
+    prepaidPasses,
+    prepaidEvents,
+    monthlyActualPayouts,
+    membershipPasses,
+    membershipEvents,
+  ] = await Promise.all([
+    store.get<SettlementSettings>("settings", "default"),
+    store.getAll<Transaction>("transactions"),
+    store.getAll<PrepaidPass>("prepaidPasses"),
+    store.getAll<PrepaidEvent>("prepaidEvents"),
+    store.getAll<MonthlyActualPayout>("monthlyActualPayouts"),
+    store.getAll<MembershipPass>("membershipPasses"),
+    store.getAll<MembershipEvent>("membershipEvents"),
+  ]);
 
   return {
     backupVersion: BACKUP_VERSION,
@@ -44,6 +60,8 @@ export async function buildBackup(store: RecordStore): Promise<BackupData> {
     prepaidPasses,
     prepaidEvents,
     monthlyActualPayouts,
+    membershipPasses,
+    membershipEvents,
   };
 }
 
@@ -70,6 +88,10 @@ export function validateBackup(data: unknown): data is BackupData {
   if (!Array.isArray(data.prepaidPasses)) return false;
   if (!Array.isArray(data.prepaidEvents)) return false;
   if (!Array.isArray(data.monthlyActualPayouts)) return false;
+  // 회원권 필드는 schemaVersion 1(회원권 이전) 백업에는 아예 없을 수 있다 — 없으면 통과,
+  // 있으면 반드시 배열이어야 한다 (손상된 값은 차단).
+  if (data.membershipPasses !== undefined && !Array.isArray(data.membershipPasses)) return false;
+  if (data.membershipEvents !== undefined && !Array.isArray(data.membershipEvents)) return false;
 
   return true;
 }
@@ -92,6 +114,13 @@ export async function restoreBackup(store: RecordStore, data: BackupData): Promi
   }
   for (const payout of data.monthlyActualPayouts) {
     await store.put("monthlyActualPayouts", payout);
+  }
+  // 구버전(schemaVersion 1) 백업에는 이 필드가 없다 — 없으면 빈 배열로 정상 복원된다.
+  for (const pass of data.membershipPasses ?? []) {
+    await store.put("membershipPasses", pass);
+  }
+  for (const event of data.membershipEvents ?? []) {
+    await store.put("membershipEvents", event);
   }
 
   // 복원된 데이터는 legacy localStorage 마이그레이션 대상이 아니므로 완료 상태로 표시한다.

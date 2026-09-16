@@ -42,6 +42,17 @@ export function applyBonusRate(paidAmount: number, bonusRate: number): number {
   return Math.round(paidAmount * (1 + bonusRate));
 }
 
+/**
+ * 금액 입력창의 "첫자리 선행 0"만 제거한다 (예: "00010000" -> "10000"). 중간/끝의 0과
+ * 소수점 이하는 그대로 둔다 ("0.5" -> "0.5", "100" -> "100"). 빈 문자열/단독 "0"은 사용자가
+ * 아직 입력 중일 수 있는 정상 상태라 그대로 둔다 — 금액 input마다 제각각 regex를 새로 쓰지
+ * 않고 이 helper 하나만 재사용한다.
+ */
+export function normalizeAmountInput(value: string): string {
+  if (value === "") return value;
+  return value.replace(/^0+(?=\d)/, "");
+}
+
 /** 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD). new Date().toISOString()은 UTC 기준이라 자정 근처에 날짜가 하루 밀릴 수 있다. */
 export function todayDateString(): string {
   const now = new Date();

@@ -5,35 +5,43 @@ import { useEffect, useState } from "react";
 import { formatSignedWon, formatWon } from "@/lib/settlement/format";
 import { currentMonthKey } from "@/lib/settlement/month";
 import {
-  combinePeriodSummary,
+  combineFullPeriodSummary,
   filterByMonth,
+  filterMembershipEventsByMonth,
   filterPrepaidEventsByMonth,
 } from "@/lib/settlement/summary";
-import { loadPrepaidEvents, loadTransactions } from "@/lib/settlement/storage";
-import type { PrepaidEvent, Transaction } from "@/lib/settlement/types";
+import {
+  loadMembershipEvents,
+  loadPrepaidEvents,
+  loadTransactions,
+} from "@/lib/settlement/storage";
+import type { MembershipEvent, PrepaidEvent, Transaction } from "@/lib/settlement/types";
 
 export default function HomePage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [prepaidEvents, setPrepaidEvents] = useState<PrepaidEvent[] | null>(null);
+  const [membershipEvents, setMembershipEvents] = useState<MembershipEvent[] | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [loadedTransactions, loadedPrepaidEvents] = await Promise.all([
+      const [loadedTransactions, loadedPrepaidEvents, loadedMembershipEvents] = await Promise.all([
         loadTransactions(),
         loadPrepaidEvents(),
+        loadMembershipEvents(),
       ]);
       // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
 
       setTransactions(loadedTransactions);
       setPrepaidEvents(loadedPrepaidEvents);
+      setMembershipEvents(loadedMembershipEvents);
     })();
   }, []);
 
-  if (!transactions || !prepaidEvents) {
+  if (!transactions || !prepaidEvents || !membershipEvents) {
     return <p className="text-sm text-zinc-400">불러오는 중...</p>;
   }
 
-  if (transactions.length === 0 && prepaidEvents.length === 0) {
+  if (transactions.length === 0 && prepaidEvents.length === 0 && membershipEvents.length === 0) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-bold">홈</h1>
@@ -53,7 +61,12 @@ export default function HomePage() {
   const monthKey = currentMonthKey();
   const monthTransactions = filterByMonth(transactions, monthKey);
   const monthPrepaidEvents = filterPrepaidEventsByMonth(prepaidEvents, monthKey);
-  const combined = combinePeriodSummary(monthTransactions, monthPrepaidEvents);
+  const monthMembershipEvents = filterMembershipEventsByMonth(membershipEvents, monthKey);
+  const combined = combineFullPeriodSummary(
+    monthTransactions,
+    monthPrepaidEvents,
+    monthMembershipEvents
+  );
 
   return (
     <div className="flex flex-col gap-4">

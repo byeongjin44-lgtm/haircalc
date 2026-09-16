@@ -12,39 +12,45 @@ import {
   shiftMonthKey,
 } from "@/lib/settlement/month";
 import {
-  combinePeriodSummary,
+  combineFullPeriodSummary,
   filterByMonth,
+  filterMembershipEventsByMonth,
   filterPrepaidEventsByMonth,
   groupByDate,
+  groupMembershipEventsByDate,
   groupPrepaidEventsByDate,
 } from "@/lib/settlement/summary";
 import {
+  loadMembershipEvents,
   loadMonthlyActualPayout,
   loadPrepaidEvents,
   loadTransactions,
   saveMonthlyActualPayout,
 } from "@/lib/settlement/storage";
-import type { PrepaidEvent, Transaction } from "@/lib/settlement/types";
+import type { MembershipEvent, PrepaidEvent, Transaction } from "@/lib/settlement/types";
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function SettlementPage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [prepaidEvents, setPrepaidEvents] = useState<PrepaidEvent[] | null>(null);
+  const [membershipEvents, setMembershipEvents] = useState<MembershipEvent[] | null>(null);
   const [monthKey, setMonthKey] = useState(() => currentMonthKey());
   const [actualPayoutText, setActualPayoutText] = useState("");
   const [payoutSaved, setPayoutSaved] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const [loadedTransactions, loadedPrepaidEvents] = await Promise.all([
+      const [loadedTransactions, loadedPrepaidEvents, loadedMembershipEvents] = await Promise.all([
         loadTransactions(),
         loadPrepaidEvents(),
+        loadMembershipEvents(),
       ]);
       // IndexedDB는 브라우저에서만 접근 가능해 마운트 이후에 읽어야 한다 (SSR 시 값이 없음).
 
       setTransactions(loadedTransactions);
       setPrepaidEvents(loadedPrepaidEvents);
+      setMembershipEvents(loadedMembershipEvents);
     })();
   }, []);
 
@@ -66,9 +72,13 @@ export default function SettlementPage() {
     () => (prepaidEvents ? filterPrepaidEventsByMonth(prepaidEvents, monthKey) : []),
     [prepaidEvents, monthKey]
   );
+  const monthMembershipEvents = useMemo(
+    () => (membershipEvents ? filterMembershipEventsByMonth(membershipEvents, monthKey) : []),
+    [membershipEvents, monthKey]
+  );
   const summary = useMemo(
-    () => combinePeriodSummary(monthTransactions, monthPrepaidEvents),
-    [monthTransactions, monthPrepaidEvents]
+    () => combineFullPeriodSummary(monthTransactions, monthPrepaidEvents, monthMembershipEvents),
+    [monthTransactions, monthPrepaidEvents, monthMembershipEvents]
   );
   const dailyTxGroups = useMemo(
     () => groupByDate(monthTransactions),
@@ -77,6 +87,10 @@ export default function SettlementPage() {
   const dailyPrepaidGroups = useMemo(
     () => groupPrepaidEventsByDate(monthPrepaidEvents),
     [monthPrepaidEvents]
+  );
+  const dailyMembershipGroups = useMemo(
+    () => groupMembershipEventsByDate(monthMembershipEvents),
+    [monthMembershipEvents]
   );
 
   const actualPayoutAmount =
@@ -96,7 +110,7 @@ export default function SettlementPage() {
   const daysInMonth = getDaysInMonth(monthKey);
   const leadingBlanks = getFirstWeekday(monthKey);
 
-  if (!transactions || !prepaidEvents) {
+  if (!transactions || !prepaidEvents || !membershipEvents) {
     return <p className="text-sm text-zinc-400">불러오는 중...</p>;
   }
 
@@ -171,7 +185,9 @@ export default function SettlementPage() {
         </div>
       </section>
 
-      {monthTransactions.length === 0 && monthPrepaidEvents.length === 0 && (
+      {monthTransactions.length === 0 &&
+        monthPrepaidEvents.length === 0 &&
+        monthMembershipEvents.length === 0 && (
         <p className="text-center text-xs text-zinc-400">
           이 달에는 등록된 거래가 없어요.{" "}
           <Link href="/entry" className="underline">
@@ -195,7 +211,12 @@ export default function SettlementPage() {
             const dateStr = buildDateString(monthKey, day);
             const dayTransactions = dailyTxGroups[dateStr] ?? [];
             const dayPrepaidEvents = dailyPrepaidGroups[dateStr] ?? [];
-            const daySummary = combinePeriodSummary(dayTransactions, dayPrepaidEvents);
+            const dayMembershipEvents = dailyMembershipGroups[dateStr] ?? [];
+            const daySummary = combineFullPeriodSummary(
+              dayTransactions,
+              dayPrepaidEvents,
+              dayMembershipEvents
+            );
 
             return (
               <Link

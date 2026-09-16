@@ -1,12 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  combineFullPeriodSummary,
   filterByDate,
   filterByMonth,
   groupByDate,
   summarizeTransactions,
 } from "./summary.ts";
-import type { Transaction } from "./types.ts";
+import type { MembershipEvent, PrepaidEvent, Transaction } from "./types.ts";
 
 function makeTransaction(overrides: Partial<Transaction>): Transaction {
   return {
@@ -107,5 +108,49 @@ describe("summarizeTransactions", () => {
     assert.equal(summary.transactionCount, 0);
     assert.equal(summary.averageAmount, 0);
     assert.equal(summary.averageRate, 0);
+  });
+});
+
+describe("J. combineFullPeriodSummary (거래 + 정액권 + 회원권 합산)", () => {
+  test("월정산 합계에 회원권 이벤트 영향이 함께 더해진다", () => {
+    const prepaidEvent: PrepaidEvent = {
+      id: "p-evt-1",
+      prepaidPassId: "pass-1",
+      type: "PURCHASE",
+      date: "2026-09-12",
+      creditAmountImpact: 1_000_000,
+      salesImpact: 1_000_000,
+      settlementImpact: 400_000,
+      commissionRateSnapshot: 0.4,
+      createdAt: "2026-09-12T00:00:00.000Z",
+    };
+    const membershipEvent: MembershipEvent = {
+      id: "m-evt-1",
+      membershipPassId: "membership-1",
+      type: "USE",
+      date: "2026-09-12",
+      countImpact: -1,
+      salesImpact: 50_000,
+      settlementImpact: 20_000,
+      commissionRateSnapshot: 0.4,
+      perUseAmountSnapshot: 50_000,
+      createdAt: "2026-09-12T00:00:00.000Z",
+    };
+
+    const combined = combineFullPeriodSummary([sameDayTx1], [prepaidEvent], [membershipEvent]);
+
+    // 거래(100,000/40,000) + 정액권(1,000,000/400,000) + 회원권(50,000/20,000)
+    assert.equal(combined.totalAmount, 1_150_000);
+    assert.equal(combined.totalSettlementAmount, 460_000);
+    assert.equal(combined.membershipImpact.salesImpact, 50_000);
+    assert.equal(combined.membershipImpact.settlementImpact, 20_000);
+  });
+
+  test("회원권 이벤트가 없으면 기존 combinePeriodSummary와 결과가 동일하다", () => {
+    const combined = combineFullPeriodSummary([sameDayTx1], [], []);
+    assert.equal(combined.totalAmount, 100_000);
+    assert.equal(combined.totalSettlementAmount, 40_000);
+    assert.equal(combined.membershipImpact.salesImpact, 0);
+    assert.equal(combined.membershipImpact.settlementImpact, 0);
   });
 });

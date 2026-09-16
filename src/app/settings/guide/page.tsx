@@ -20,8 +20,8 @@ interface GuideSection {
 }
 
 /**
- * 실제 코드(engine.ts, prepaid.ts, settings 화면)에 존재하는 항목만 설명한다.
- * 횟수형 회원권, 정액권 사용 할인율처럼 아직 구현되지 않은 기능은 넣지 않는다.
+ * 실제 코드(engine.ts, prepaid.ts, membership.ts, settings 화면)에 존재하는 항목만 설명한다.
+ * 아직 구현되지 않은 기능은 넣지 않는다.
  */
 const GUIDE_SECTIONS: GuideSection[] = [
   {
@@ -280,6 +280,40 @@ const GUIDE_SECTIONS: GuideSection[] = [
         <p className="text-xs text-zinc-400">
           할인율을 설정하지 않은 정액권(기존 정액권 포함)은 이 기능과 무관하게 지금까지와
           동일하게 동작합니다.
+        </p>
+      </div>
+    ),
+  },
+  {
+    id: "membership",
+    title: "L. 회원권",
+    summary: "정액권은 금액을 차감하고, 회원권은 횟수를 차감합니다.",
+    body: (
+      <div className="flex flex-col gap-2 text-sm text-zinc-600">
+        <p>
+          <strong className="text-zinc-800">정액권</strong>은 결제한 금액에서 사용한
+          금액만큼 잔액이 줄어들지만, <strong className="text-zinc-800">회원권</strong>은
+          정해진 횟수에서 사용한 횟수만큼만 줄어듭니다.
+        </p>
+        <ExampleCard>
+          클리닉 10회권 50만원 등록
+          <p className="mt-1 text-zinc-500">→ 1회 사용 → 9회 남음 (금액은 따로 차감되지 않음)</p>
+        </ExampleCard>
+        <p>회원권도 정액권과 똑같이 정산 반영 방식을 선택합니다.</p>
+        <ul className="list-disc space-y-1.5 pl-4">
+          <li>
+            <strong className="text-zinc-800">사용 시 반영</strong> — 판매 시에는 정산하지
+            않고, 1회 사용할 때마다 (실결제금액 ÷ 전체횟수)만큼을 매출로 반영합니다.
+          </li>
+          <li>
+            <strong className="text-zinc-800">판매 즉시 반영</strong> — 판매한 시점에 전체
+            결제금액을 정산에 반영합니다. 이후 본인이 사용할 때는 횟수만 차감되고 중복으로
+            정산하지 않습니다.
+          </li>
+        </ul>
+        <p>
+          거래 등록 화면에서 결제수단을 <strong className="text-zinc-800">회원권</strong>으로
+          선택하면 금액을 입력하는 대신 사용할 회원권을 선택해 1회 사용으로 기록합니다.
         </p>
       </div>
     ),
