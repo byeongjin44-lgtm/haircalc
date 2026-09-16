@@ -83,13 +83,13 @@ export const MATERIAL_COST_MODE_LABELS: Record<MaterialCostMode, string> = {
   FIXED: "고정금액(원)",
 };
 
-/** 화면 표시 순서. 기본값(SALE_IMMEDIATE)은 이 순서와 무관하게 유지된다. */
+/** 화면 표시 순서. 신규 등록 폼 기본값(USE_BASED)은 이 순서와 무관하게 유지된다. */
 export const PREPAID_RECOGNITION_MODES: readonly PrepaidRecognitionMode[] = [
   "USE_BASED",
   "SALE_IMMEDIATE",
 ];
 
-/** 화면 표시 순서. 기본값(CREDIT_AMOUNT)은 이 순서와 무관하게 유지된다. */
+/** 화면 표시 순서. 신규 등록 폼 기본값(PAID_RATIO)은 이 순서와 무관하게 유지된다. */
 export const BONUS_SETTLEMENT_MODES: readonly BonusSettlementMode[] = [
   "PAID_RATIO",
   "CREDIT_AMOUNT",

@@ -87,9 +87,10 @@ const INITIAL_PREPAID_NEW_FORM = {
   creditAmountText: "",
   creditTouched: false,
   bonusRateText: "0",
-  recognitionMode: "SALE_IMMEDIATE" as PrepaidRecognitionMode,
-  bonusSettlementMode: "CREDIT_AMOUNT" as BonusSettlementMode,
+  recognitionMode: "USE_BASED" as PrepaidRecognitionMode,
+  bonusSettlementMode: "PAID_RATIO" as BonusSettlementMode,
   discountRateText: "0",
+  discountCustomMode: false,
   discountSettlementBasis: "DISCOUNTED_AMOUNT" as PrepaidDiscountSettlementBasis,
   memo: "",
 };
@@ -125,6 +126,11 @@ export default function PrepaidNewPage() {
   const [discountRateText, setDiscountRateText] = useState(
     INITIAL_PREPAID_NEW_FORM.discountRateText
   );
+  /** "직접 입력" 버튼을 눌러 숫자 input을 직접 편집 중인지. false면 항상 프리셋 버튼 중
+   * discountRateText와 일치하는 값이 selected로 표시되고 숫자 input은 숨겨진다. */
+  const [discountCustomMode, setDiscountCustomMode] = useState(
+    INITIAL_PREPAID_NEW_FORM.discountCustomMode
+  );
   const [discountSettlementBasis, setDiscountSettlementBasis] =
     useState<PrepaidDiscountSettlementBasis>(INITIAL_PREPAID_NEW_FORM.discountSettlementBasis);
   const [memo, setMemo] = useState(INITIAL_PREPAID_NEW_FORM.memo);
@@ -142,6 +148,7 @@ export default function PrepaidNewPage() {
     setRecognitionMode(INITIAL_PREPAID_NEW_FORM.recognitionMode);
     setBonusSettlementMode(INITIAL_PREPAID_NEW_FORM.bonusSettlementMode);
     setDiscountRateText(INITIAL_PREPAID_NEW_FORM.discountRateText);
+    setDiscountCustomMode(INITIAL_PREPAID_NEW_FORM.discountCustomMode);
     setDiscountSettlementBasis(INITIAL_PREPAID_NEW_FORM.discountSettlementBasis);
     setMemo(INITIAL_PREPAID_NEW_FORM.memo);
     setFieldErrors({});
@@ -369,7 +376,7 @@ export default function PrepaidNewPage() {
           </div>
         </fieldset>
 
-        <label className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <span className="text-sm text-zinc-500">정액권 사용 할인율 (%)</span>
           <div className="flex flex-wrap gap-2">
             {DISCOUNT_RATE_QUICK_OPTIONS.map((pct) => (
@@ -378,10 +385,11 @@ export default function PrepaidNewPage() {
                 type="button"
                 onClick={() => {
                   setDiscountRateText(String(pct));
+                  setDiscountCustomMode(false);
                   setFieldErrors((prev) => ({ ...prev, discountRate: undefined }));
                 }}
                 className={`min-h-[40px] rounded-full border px-4 py-2 text-sm ${
-                  discountRateText === String(pct)
+                  !discountCustomMode && discountRateText === String(pct)
                     ? "border-zinc-900 bg-zinc-900 text-white"
                     : "border-zinc-200 text-zinc-700"
                 }`}
@@ -389,22 +397,35 @@ export default function PrepaidNewPage() {
                 {pct === 0 ? "없음" : `${pct}%`}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setDiscountCustomMode(true)}
+              className={`min-h-[40px] rounded-full border px-4 py-2 text-sm ${
+                discountCustomMode
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 text-zinc-700"
+              }`}
+            >
+              직접 입력
+            </button>
           </div>
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            max={99}
-            placeholder="직접 입력"
-            value={discountRateText}
-            onChange={(e) => {
-              setDiscountRateText(e.target.value);
-              setFieldErrors((prev) => ({ ...prev, discountRate: undefined }));
-            }}
-            className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.discountRate)}`}
-          />
+          {discountCustomMode && (
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={99}
+              placeholder="할인율"
+              value={discountRateText}
+              onChange={(e) => {
+                setDiscountRateText(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, discountRate: undefined }));
+              }}
+              className={`rounded-lg border px-3 py-2 ${fieldBorderClass(!!fieldErrors.discountRate)}`}
+            />
+          )}
           <FieldError message={fieldErrors.discountRate} />
-        </label>
+        </div>
 
         {hasDiscount && (
           <fieldset className="flex flex-col gap-2">

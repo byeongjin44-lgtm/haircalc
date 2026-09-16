@@ -2,23 +2,87 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-09-14
+마지막 업데이트: 2026-09-15
 
 작업 브랜치 안내: main은 실사용자 Production 안정판이다. 정액권 stale state 버그 수정
 + 앱 내 사용 설명서 PART까지는 dev에서 검증 후 main에 fast-forward merge + push
-완료되어 현재 main/origin main/dev/origin dev가 전부 동일 커밋이다. 이번 정액권 사용
-할인율 PART는 다시 `dev`에서만 작업 중이며 아직 커밋하지 않았다(사용자 명시 지시,
-main 수정/merge/push 금지).
+완료되어 main/origin main은 `4bd72c6`에 고정되어 있다. 정액권 사용 할인율 PART는
+`dev`에서 검증 후 commit `7fc9422`로 `dev`/`origin dev`에 push 완료했다(main에는
+아직 병합/push하지 않음). 이번 정액권 신규등록 UX PART(기본값 변경 + 할인율 직접입력
+UI)는 `7fc9422` 위에서 다시 `dev`에서만 작업 중이며 **아직 커밋하지 않았다**(사용자
+명시 지시, main 수정/merge/push 금지, 커밋도 보류).
 
 ## 1. 현재 상태
 
 상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
 실기기 UX 개선(설치 흐름/저장 피드백) 완료 + 저장 성공 피드백/입력 오류 인라인 표시 완료 +
 정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 + 정액권 삭제 + 환불 전액 버튼 +
-앱 내 사용 설명서 완료(main 반영됨) + **(dev 브랜치, 미커밋) 정액권 사용 할인율 지원
-완료** / 다음 단계: dev 검증 → 커밋/push → main 병합 → 실제 배포(Vercel)
+앱 내 사용 설명서 완료(main 반영됨) + 정액권 사용 할인율 지원 완료(dev 커밋 `7fc9422`,
+main 미병합) + **(dev 브랜치, 미커밋) 정액권 신규등록 UX 개선(기본값 변경 + 할인율
+직접입력 UI) 완료** / 다음 단계: 실기기 확인 → 커밋/push → main 병합 → 실제 배포(Vercel)
 
-**정액권 사용 할인율 지원 (2026-09-14, dev 브랜치, 미커밋)**: 일부 매장의 "정액권
+**정액권 신규등록 UX 개선 (2026-09-15, dev 브랜치, commit `7fc9422` 위, 미커밋)**:
+`/prepaid/new`(신규 정액권 등록 화면) 한 곳만 수정했다. 계산 엔진(`prepaid.ts`의
+계산 함수 전부) / 데이터 모델(`types.ts`) / IndexedDB / 기존 정액권 데이터는 전혀
+건드리지 않았고, 기존 84개 테스트가 수정 없이 그대로 통과한다.
+
+1. **정산 방식 기본값 변경**: 신규 등록 폼의 `recognitionMode` 초기값을
+   `SALE_IMMEDIATE`(판매 즉시 반영) → `USE_BASED`(사용 시 반영)으로 바꿨다.
+   `INITIAL_PREPAID_NEW_FORM` 한 곳만 수정했고, `resetForm()`/`useState` 초기값이
+   모두 이 상수를 그대로 참조하는 기존 구조라 "화면 진입 시 selected 상태 = 실제
+   state" 원칙이 그대로 유지된다. 기존에 저장된 정액권의 `recognitionMode`는 이
+   상수와 무관하며 전혀 바뀌지 않는다.
+2. **보너스 정산 방식 기본값 변경**: 같은 방식으로 `bonusSettlementMode` 초기값을
+   `CREDIT_AMOUNT`(차감금액 기준) → `PAID_RATIO`(실결제 비율 환산)으로 바꿨다.
+   기존 저장된 정액권의 `bonusSettlementMode`는 변경하지 않는다.
+3. **`labels.ts` 주석 정정**: `PREPAID_RECOGNITION_MODES`/`BONUS_SETTLEMENT_MODES`
+   배열 위 주석이 옛 기본값(`SALE_IMMEDIATE`/`CREDIT_AMOUNT`)을 그대로 언급하고
+   있어 새 기본값에 맞게 주석 문구만 고쳤다(배열 내용·표시 순서는 무변경, 로직
+   영향 없음).
+4. **할인율 UI — "직접 입력" 모드 분리**: 기존에는 빠른 선택(없음/5/10/15/20%)을
+   눌러도 그 값이 숫자 input에 그대로 보여, "추가로 입력해야 하나?"라는 혼동이
+   있었다. `discountCustomMode`(boolean) state를 새로 추가해 숫자 input의
+   표시 여부를 분리했다:
+   - 프리셋 버튼(없음/5/10/15/20%) 클릭 → `discountRateText` 갱신 +
+     `discountCustomMode = false` → 숫자 input 숨김, 클릭한 프리셋 버튼만 selected.
+   - 새로 추가한 "직접 입력" 버튼 클릭 → `discountCustomMode = true`로만 바뀌고
+     `discountRateText`는 건드리지 않음(직전 값 유지) → 숫자 input이 나타나고
+     "직접 입력" 버튼이 selected. 7, 12.5처럼 프리셋에 없는 값도 이 input에 그대로
+     입력할 수 있다(정수/소수 허용 여부는 기존 `discountRateText`/`percentToRate`
+     처리 그대로 — 데이터 모델·검증 로직 미변경).
+   - 프리셋 버튼의 selected 판정은 `!discountCustomMode && discountRateText ===
+     String(pct)`라 "직접 입력" 모드 중에는 우연히 프리셋 값과 같아도(예: 입력값이
+     10) 프리셋 버튼이 selected로 바뀌지 않고 "직접 입력" 버튼과 input이 계속
+     보인다 — 반대로 프리셋 버튼을 누르면 즉시 `discountCustomMode`가 꺼지므로
+     항상 그 프리셋만 selected + input 숨김으로 정확히 전환된다.
+   - `INITIAL_PREPAID_NEW_FORM.discountCustomMode = false`를 추가해 `resetForm()`/
+     페이지 재진입 시 항상 "없음 selected + input 숨김" 상태로 되돌아간다(지난
+     PART의 stale-state 방지 useLayoutEffect cleanup 구조 그대로 재사용).
+   - 할인 계산 자체(`calculateDiscountedServiceAmount`, 할인 정산 기준
+     ChoiceGroup, `hasDiscount` 조건부 렌더링)는 전혀 손대지 않았다 — 이번 변경은
+     "몇 %를 선택했는지 어떻게 보여주는가"만 바꿨다.
+5. **`/settings/guide` 확인**: "E. 판매 즉시 반영 / 사용 시 반영", "F. 실결제 비율
+   환산 / 차감금액 기준", "K. 정액권 사용 할인" 세 섹션을 모두 다시 읽었다. 세
+   섹션 모두 "신규 등록 시 기본값은 ○○입니다"처럼 특정 기본값을 단정하는 문장이
+   없고 두 옵션의 차이를 일반적으로 설명하는 내용뿐이라 — 지시(9번)대로 수정하지
+   않았다.
+
+검증: `npm run lint` 통과(경고 없음) / `npm test` **기존 84개 전부 통과**(테스트
+파일 무수정 — 이번 PART는 계산 로직을 전혀 바꾸지 않아 새 케이스가 없다) / `npm run
+build` 정상 완료(라우트 구성 이전과 동일, `/prepaid/new` 여전히 "○ Static").
+
+**UI-state 테스트 A~E 관련 참고**: 이번 지시의 "10. 테스트" A~E(초기
+`recognitionMode`/`bonusSettlementMode` 값, 할인율 프리셋/직접입력 전환 시 state)는
+React 컴포넌트 내부 state이고, 이 저장소의 `npm test`는 `node --test`로
+`src/lib/**/*.test.ts`(순수 함수)만 돌리는 구조다(`@testing-library/react`, `jsdom`
+등 컴포넌트 테스트 인프라 없음). 이번 PART만을 위해 새 테스트 라이브러리를 추가하는
+것은 "빠른 MVP 우선 + 불필요한 라이브러리 추가 금지" 원칙과 맞지 않다고 판단해
+추가하지 않았고, 대신 위 4번 항목처럼 `discountCustomMode`/프리셋 selected 조건을
+코드 레벨에서 직접 검토해 A~E 시나리오를 수동으로 검증했다. 컴포넌트 테스트 인프라
+도입은 필요하면 별도로 사용자에게 확인 후 진행하는 것을 권장한다.
+
+**정액권 사용 할인율 지원 (2026-09-14, dev 브랜치, commit `7fc9422`, main 미병합)**:
+일부 매장의 "정액권
 결제 시 시술가 할인" 정책을 지원했다. 기존 계산 결과(일반 거래 정산, 기존 정액권,
 월정산, backup/restore, IndexedDB 구조)는 전혀 바꾸지 않았고, 기존 76개 테스트는
 수정 없이 그대로 통과한다.
