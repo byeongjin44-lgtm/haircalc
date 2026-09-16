@@ -231,6 +231,7 @@ export default function PrepaidDetailPage() {
           pass={pass}
           compute={(input) => applyOtherDesignerUse(pass, input, settings)}
           onSaved={(result) => handleSaved(result, "OTHER_DESIGNER_USE")}
+          helperText="다른 디자이너의 급여를 계산하는 기능이 아닙니다. 내가 관리 중인 이 정액권을 다른 디자이너가 사용했을 때, 내 잔액과 정산 영향만 반영합니다."
         />
       )}
       {activeAction === "REFUND" && (
@@ -335,12 +336,15 @@ function CreditEventForm({
   onSaved,
   variant = "default",
   showFillBalanceButton = false,
+  helperText,
 }: {
   pass: PrepaidPass;
   compute: (input: PrepaidCreditEventInput) => PrepaidLedgerResult;
   onSaved: (result: PrepaidLedgerResult) => void | Promise<void>;
   variant?: "default" | "risky";
   showFillBalanceButton?: boolean;
+  /** "타 디자이너 사용"처럼 오해하기 쉬운 동작에 짧게 의미를 설명하는 문구. */
+  helperText?: string;
 }) {
   const [date, setDate] = useState(todayDateString());
   const [amountText, setAmountText] = useState("");
@@ -400,6 +404,7 @@ function CreditEventForm({
       }`}
     >
       <p className="text-xs text-zinc-400">현재 잔액 {formatWon(pass.remainingBalance)}</p>
+      {helperText && <p className="text-xs text-zinc-400">{helperText}</p>}
 
       <label className="flex flex-col gap-1">
         <span className="text-sm text-zinc-500">날짜</span>

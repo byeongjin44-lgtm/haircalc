@@ -185,6 +185,11 @@ export default function SettlementPage() {
         </div>
       </section>
 
+      <p className="text-center text-[11px] text-zinc-400">
+        이번 달 타 디자이너 사용분을 모두 반영했는지 확인해주세요. 로컬 저장 방식이라
+        직접 기록하지 않으면 반영되지 않습니다.
+      </p>
+
       {monthTransactions.length === 0 &&
         monthPrepaidEvents.length === 0 &&
         monthMembershipEvents.length === 0 && (

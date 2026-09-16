@@ -163,6 +163,22 @@ export default function EntryPage() {
     setFormError(null);
   }
 
+  /**
+   * 정액권/회원권 "사용" 등록 성공 후에만 쓰는 부분 초기화. 열린 선택 UI를 닫고 결제수단을
+   * 일반 거래 기본값으로 되돌려 다음 거래를 위한 첫 화면 상태로 만든다. 날짜는 그대로
+   * 유지해(연속 입력 편의) SuccessOverlay가 화면을 덮고 있는 동안 배경만 조용히 초기화되고,
+   * overlay가 닫혔을 때는 이미 첫 화면이라 화면이 튀는 느낌이 없다.
+   */
+  function resetAfterPassUseSuccess() {
+    setPaymentChoice(INITIAL_ENTRY_FORM.paymentChoice);
+    setSelectedPassId(INITIAL_ENTRY_FORM.selectedPassId);
+    setSelectedMembershipPassId(INITIAL_ENTRY_FORM.selectedMembershipPassId);
+    setAmountText(INITIAL_ENTRY_FORM.amountText);
+    setMemo(INITIAL_ENTRY_FORM.memo);
+    setFieldErrors({});
+    setFormError(null);
+  }
+
   // Next.js 16.3부터 라우트를 떠나도 곧바로 언마운트되지 않고 Activity로 hidden 상태만 되면서
   // useState 값을 그대로 들고 있을 수 있다. 저장 성공 후 같은 화면에 남아있을 때의 부분
   // 초기화(아래 handleSave, 금액/메모만 리셋)와는 별개로, 이 cleanup은 화면을 실제로 떠날
@@ -322,7 +338,7 @@ export default function EntryPage() {
             .map((p) => (p.id === result.pass.id ? result.pass : p))
             .filter((p) => p.status === "ACTIVE")
         );
-        setMemo("");
+        resetAfterPassUseSuccess();
         showSuccess("회원권 사용이 등록되었습니다.");
       } catch (e) {
         // 저장 실패 시에는 성공 오버레이를 보여주지 않고 화면에 오류만 남긴다.
@@ -352,8 +368,7 @@ export default function EntryPage() {
             .map((p) => (p.id === result.pass.id ? result.pass : p))
             .filter((p) => p.status === "ACTIVE")
         );
-        setAmountText("");
-        setMemo("");
+        resetAfterPassUseSuccess();
         showSuccess("정액권 사용이 등록되었습니다.");
       } catch (e) {
         // 저장 실패 시에는 성공 오버레이를 보여주지 않고 화면에 오류만 남긴다.
@@ -392,11 +407,16 @@ export default function EntryPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold">거래 등록</h1>
-        <Link href="/prepaid" className="text-sm text-zinc-500 underline">
-          보유 정액권 관리 →
-        </Link>
+        <div className="flex gap-3 text-sm">
+          <Link href="/prepaid" className="text-zinc-500 underline">
+            정액권 관리 →
+          </Link>
+          <Link href="/membership" className="text-zinc-500 underline">
+            회원권 관리 →
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm">

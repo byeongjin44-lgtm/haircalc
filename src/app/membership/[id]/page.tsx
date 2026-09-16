@@ -221,6 +221,7 @@ export default function MembershipDetailPage() {
           perUseAmount={perUseAmount}
           compute={(input) => applyOtherDesignerUse(pass, input, settings)}
           onSaved={(result) => handleSaved(result, "OTHER_DESIGNER_USE")}
+          helperText="다른 디자이너의 급여를 계산하는 기능이 아닙니다. 내가 관리 중인 이 회원권을 다른 디자이너가 사용했을 때, 내 남은 횟수와 정산 영향만 반영합니다."
         />
       )}
       {activeAction === "ADJUSTMENT" && (
@@ -320,11 +321,14 @@ function CountEventForm({
   perUseAmount,
   compute,
   onSaved,
+  helperText,
 }: {
   pass: MembershipPass;
   perUseAmount: number;
   compute: (input: MembershipUseInput) => MembershipLedgerResult;
   onSaved: (result: MembershipLedgerResult) => void | Promise<void>;
+  /** "타 디자이너 사용"처럼 오해하기 쉬운 동작에 짧게 의미를 설명하는 문구. */
+  helperText?: string;
 }) {
   const [date, setDate] = useState(todayDateString());
   const [memo, setMemo] = useState("");
@@ -360,6 +364,7 @@ function CountEventForm({
       <p className="text-xs text-zinc-400">
         남은 횟수 {pass.remainingCount}회 · 1회 기준 매출 {formatWon(perUseAmount)}
       </p>
+      {helperText && <p className="text-xs text-zinc-400">{helperText}</p>}
 
       <label className="flex flex-col gap-1">
         <span className="text-sm text-zinc-500">날짜</span>

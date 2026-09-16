@@ -7,24 +7,94 @@
 작업 브랜치 안내: main은 실사용자 Production 안정판이다. 정액권 stale state 버그 수정
 + 앱 내 사용 설명서 PART까지는 dev에서 검증 후 main에 fast-forward merge + push
 완료되어 main/origin main은 `4bd72c6`에 고정되어 있다. 정액권 사용 할인율 PART(commit
-`7fc9422`)와 정액권 신규등록 UX 개선 PART(기본값 변경 + 할인율 직접입력 UI, commit
-`688e41b`)는 `dev`에서 검증 후 `dev`/`origin dev`에 push 완료했다(main에는 아직
-병합/push하지 않음). 이번 PART A(금액 입력/validation UX 개선) + PART B(회원권 신규
-기능)는 `688e41b` 위에서 다시 `dev`에서만 작업 중이며 **아직 커밋하지 않았다**(사용자
-명시 지시, main 수정/merge/push 금지, 커밋도 보류).
+`7fc9422`), 정액권 신규등록 UX 개선 PART(commit `688e41b`), 금액입력/validation UX
+개선 + 회원권 신규 기능 PART(commit `03765e4`)까지 `dev`에서 검증 후 `dev`/`origin
+dev`에 push 완료했다(main에는 아직 병합/push하지 않음). 이번 PART(거래등록 리셋 +
+이용권 접근성 통합 + 타 디자이너 사용 빠른 접근 + 로컬 데이터 한계 안내)는 `03765e4`
+위에서 다시 `dev`에서만 작업 중이며 **아직 커밋하지 않았다**(사용자 명시 지시, main
+수정/merge/push 금지, 커밋도 보류).
 
 ## 1. 현재 상태
 
 상태: 핵심 기능 완료 + IndexedDB 완료 + 모바일 UX 완료 + PWA 준비 완료 +
 실기기 UX 개선(설치 흐름/저장 피드백) 완료 + 저장 성공 피드백/입력 오류 인라인 표시 완료 +
 정액권 등록 stale state 버그 수정 + 보너스 빠른 선택 + 정액권 삭제 + 환불 전액 버튼 +
-앱 내 사용 설명서 완료 + 정액권 사용 할인율 지원 완료 + 정액권 신규등록 UX 개선 완료
-(위 전부 dev/origin dev 커밋 `688e41b`까지 반영, main 미병합) + **(dev 브랜치, 미커밋)
-금액 입력 선행 0 방지/보너스 활성화 조건/validation 오류 포커스 개선(PART A) + 횟수
-차감형 회원권 신규 기능(PART B) 완료** / 다음 단계: 실기기 확인 → 커밋/push → main
-병합 → 실제 배포(Vercel)
+앱 내 사용 설명서 완료 + 정액권 사용 할인율 지원 완료 + 정액권 신규등록 UX 개선 완료 +
+금액입력/validation UX 개선(PART A) + 횟수 차감형 회원권 신규 기능(PART B) 완료
+(위 전부 dev/origin dev 커밋 `03765e4`까지 반영, main 미병합) + **(dev 브랜치, 미커밋)
+거래등록 후 초기 화면 자동 복귀 + 하단 nav "이용권" 통합 + 정액권/회원권 상단
+segmented tab + 타 디자이너 사용 목록 빠른 접근 + 로컬 데이터 한계 안내 완료** /
+다음 단계: 실기기 확인 → 커밋/push → main 병합 → 실제 배포(Vercel)
 
-**PART A — 금액 입력 / validation UX 개선 (2026-09-16, dev 브랜치, `688e41b` 위, 미커밋)**:
+**거래등록 UX / 이용권 접근성 / 로컬 데이터 한계 안내 (2026-09-16, dev 브랜치, `03765e4`
+위, 미커밋)**: 최근 실기기 테스트에서 확인된 UX/navigation/안내 문제만 개선했다.
+정액권/회원권 정산 공식, SALE_IMMEDIATE/USE_BASED, PAID_RATIO/CREDIT_AMOUNT, 할인
+계산, event snapshot, IndexedDB schema, backup/restore, 월정산 합산 공식은 전부
+무수정 — `git diff --stat`으로 `prepaid.ts`/`membership.ts`/`engine.ts`/`types.ts`/
+`backup.ts`/`recordStore*.ts`/`summary.ts`와 모든 `*.test.ts`가 완전히 무변경임을
+재확인했다(이번 PART가 건드린 파일은 UI 8개 + 신규 컴포넌트 1개뿐). 기존 115개
+테스트는 수정 없이 그대로 통과한다.
+
+1. **`/entry` 거래등록 후 초기 화면 복귀**: `resetAfterPassUseSuccess()`(신규 함수)를
+   추가해, 정액권/회원권 "사용" 등록이 성공하면 `paymentChoice`를 기본값(CASH)으로,
+   `selectedPassId`/`selectedMembershipPassId`/`amountText`/`memo`/`fieldErrors`/
+   `formError`를 전부 초기화한다 — 열려 있던 정액권/회원권 선택 UI가 닫히고 결제수단이
+   일반 거래 화면으로 돌아간다. 날짜(`date`)는 건드리지 않아 연속 입력 시 불필요하게
+   튀지 않는다. `showSuccess()`(SuccessOverlay, `fixed inset-0 z-40`로 화면 전체를
+   덮음)와 이 초기화를 같은 핸들러 안에서 동기로 함께 호출해, overlay가 화면을 덮고
+   있는 동안 배경 state가 조용히 바뀌고 overlay가 닫혔을 때는 이미 첫 화면이라 화면이
+   튀는 느낌이 없다. `router.refresh()`/`location.reload()` 등 페이지 새로고침은
+   전혀 쓰지 않았다. 기존에 남겨뒀던 "일반 거래는 결제수단/고객유형 등을 유지해
+   연속입력을 돕는다"는 동작은 건드리지 않았다 — 이번 변경은 정액권/회원권 두 분기에만
+   적용된다.
+2. **하단 nav "이용권" 통합**: `BottomNav.tsx`의 4번째 탭 라벨을 "정액권"→"이용권"으로
+   바꿨다(`activePaths`는 지난 PART에서 이미 `["/prepaid", "/membership"]`로 걸어둔
+   상태라 추가 수정 없이 그대로 재사용). 하단 탭 개수는 5개 그대로 유지했다(추가 금지
+   지시 준수).
+3. **정액권/회원권 상단 segmented tab**: `src/components/PassesTabs.tsx`(신규,
+   `active: "prepaid" | "membership"` prop 하나만 받는 순수 UI 컴포넌트)를 만들어
+   `/prepaid`·`/membership` 상단에 공통으로 얹었다. 지난 PART에서 즉흥적으로 만든
+   "정액권 / 회원권" 텍스트 상호링크(브레드크럼)는 이 컴포넌트로 완전히 대체했다.
+   새 `/passes` route는 만들지 않았다(지시대로).
+4. **`/entry` 상단 빠른 접근 동일 레벨화**: 기존에는 "보유 정액권 관리 →" 링크
+   하나만 있었다. 같은 시각적 무게의 "정액권 관리 →" / "회원권 관리 →" 두 링크로
+   교체해 어느 한쪽도 더 눈에 띄지 않게 했다.
+5. **타 디자이너 사용 목록 빠른 접근**: `/prepaid`·`/membership` 목록의 각 카드
+   구조를 바꿨다 — 기존에는 `<li>` 전체가 `<Link>`였는데, 이제 `<Link>`(상세 이동)와
+   그 아래 별도의 "타 디자이너 사용" 버튼을 형제로 분리했다(링크 안에 버튼을 중첩하는
+   잘못된 마크업을 피하기 위해). 버튼을 누르면 카드별로 `QuickOtherDesignerUseModal`
+   (각 페이지 로컬 컴포넌트)이 뜬다 — 정액권은 날짜+사용금액 입력 후 저장(2번 탭 +
+   금액 입력), 회원권은 날짜만 확인하고 "1회 사용 확정"(2번 탭)으로 끝난다. 계산은
+   기존 `useByOtherDesigner`(정액권: `prepaid.ts`, 회원권: `membership.ts`)를
+   그대로 재사용했다 — 새 계산식 없음. 저장 성공 시 목록의 해당 pass만 갱신하고
+   `showSuccess()`로 알린다. 상세 화면(`/prepaid/[id]`, `/membership/[id]`)의 기존
+   "타 디자이너 사용" 액션은 그대로 남아있고 손대지 않았다(목록에서의 빠른 경로가
+   추가된 것뿐).
+6. **"타 디자이너 사용" 의미 명확화**: 목록의 빠른 입력 모달과 상세 화면의
+   `CreditEventForm`(정액권)/`CountEventForm`(회원권)에 공통으로 짧은 helper text를
+   추가했다 — "다른 디자이너의 급여를 계산하는 기능이 아닙니다. 내가 관리 중인
+   이 정액권/회원권을 다른 디자이너가 사용했을 때, 내 잔액/횟수와 정산 영향만
+   반영합니다." 두 상세 페이지의 폼 컴포넌트에 `helperText?: string` prop을 새로
+   추가해 재사용했다(기존 USE/REFUND/ADJUSTMENT 액션에는 전달하지 않아 문구가
+   추가되지 않는다).
+7. **로컬 데이터 기반 잔액 한계 안내**: `/prepaid`·`/membership` 목록 상단에 작은
+   회색 안내문 한 줄을 추가했다("잔액/남은 횟수는 이 앱에 기록한 내역 기준입니다.
+   다른 디자이너가 사용한 경우 직접 반영해주세요") — 모달이나 큰 경고창이 아니다.
+8. **월정산 안내**: `/settlement` 요약 카드 아래에 11px 회색 안내문 한 줄을
+   추가했다("이번 달 타 디자이너 사용분을 모두 반영했는지 확인해주세요. 로컬 저장
+   방식이라 직접 기록하지 않으면 반영되지 않습니다") — 매번 뜨는 modal이 아니라
+   상시 노출되는 작은 문구다.
+9. **사용 설명서(`/settings/guide`) "G. 타 디자이너 사용" 보강**: 기존 정액권 전용
+   설명을 "정액권/회원권 모두 해당"으로 넓히고, 기존 `WarningCard`(삭제 경고에 쓰던
+   빨간 강조 카드와 동일 컴포넌트 재사용)로 로컬 저장 방식/자동 동기화 안 됨/직접
+   기록 필요/잔액·횟수는 기록 기준이라는 4가지 사실을 명시했다. "L. 회원권" 섹션은
+   이번엔 수정하지 않았다(G 섹션이 정액권/회원권 공통 설명이라 중복을 피함).
+
+검증: `npm run lint` 통과(경고 없음) / `npm test` **기존 115개 전부 무수정 통과**
+(이번 PART가 추가한 건 UI뿐이라 새 pure-function 테스트 대상이 없음) / `npm run build`
+정상 완료 — 라우트 구성(16개) 이전과 동일.
+
+**PART A — 금액 입력 / validation UX 개선 (2026-09-16, dev 브랜치, commit `03765e4`)**:
 `/prepaid/new`와 `/entry`의 입력 UX만 개선했다. 계산 엔진/정산 공식/데이터 모델은
 전혀 건드리지 않았고, 기존 91개 테스트(PART 직전 기준)는 수정 없이 그대로 통과한다.
 
@@ -59,7 +129,7 @@
 검증: `npm run lint` 통과 / `npm test` **91/91 통과**(PART A 직전 84개 + 신규 7개,
 전부 무수정 통과) / `npm run build` 정상.
 
-**PART B — 횟수 차감형 회원권 신규 기능 (2026-09-16, dev 브랜치, PART A 위, 미커밋)**:
+**PART B — 횟수 차감형 회원권 신규 기능 (2026-09-16, dev 브랜치, commit `03765e4`)**:
 정액권과 별개의 신규 상품 타입을 처음부터 만들었다. 정액권 타입/계산식은 단 한 줄도
 수정하지 않았고(`prepaid.ts`/`engine.ts`/`prepaid.test.ts` 전부 무변경), 기존 91개
 테스트는 그대로 통과한다.
