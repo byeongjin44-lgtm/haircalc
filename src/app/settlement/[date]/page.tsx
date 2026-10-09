@@ -1,5 +1,7 @@
 "use client";
 
+import TransactionActions from "@/components/TransactionActions";
+import { transactionPayout } from "@/lib/settlement/transaction";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -138,9 +140,10 @@ export default function DailyDetailPage() {
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-zinc-500">
                   <span>적용 인센티브율 {Math.round(tx.commissionRateSnapshot * 100)}%</span>
-                  <span>정산액 {formatWon(tx.settlementAmount)}</span>
+                  <span>정산액 {formatWon(transactionPayout(tx))}</span>
                 </div>
-                {tx.memo && <p className="mt-1 text-xs text-zinc-400">{tx.memo}</p>}
+                <TransactionActions transaction={tx} onChanged={updated => setTransactions(prev => prev ? (updated ? prev.map(item => item.id === tx.id ? updated : item) : prev.filter(item => item.id !== tx.id)) : prev)} />
+              {tx.memo && <p className="mt-1 text-xs text-zinc-400">{tx.memo}</p>}
               </li>
             ))}
           </ul>

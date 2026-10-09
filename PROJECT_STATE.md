@@ -2,7 +2,33 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-09-16
+마지막 업데이트: 2026-10-07
+
+## 현재 작업 — 3.3% 집계 / 일반 거래 수정·삭제 / 이용권 삭제 보호
+
+- 기준: main / origin/main / dev / origin/dev = `3c05055468a529c9d82c34311b85f7c427ab3eaf`.
+- 이번 변경은 dev 작업 트리에만 존재한다. 커밋/push/merge하지 않는다.
+- 아래 과거 기록의 “main 미병합/미커밋”은 당시 기록이다. 해당 이전 작업은 위 기준 커밋으로 Production에 반영 완료되었다.
+
+### 원인과 처리
+1. calculateSettlement와 buildTransactionSnapshot은 공제 전 settlementAmount 및 공제 후 estimatedPayoutAmount를 모두 정상 계산/저장했다. IndexedDB 손실이 아니다. history 대표 금액과 summary가 공제 전 필드를 읽은 것이 원인이다.
+2. transactionPayout은 저장된 withholding3_3Applied가 true이면 저장된 estimatedPayoutAmount를 읽고, OFF이면 기존 settlementAmount를 읽는다. summary/history/일별 상세에 공통 적용했다. 홈/월정산/달력은 기존 공통 summary를 통해 반영된다. 40,000원 → 38,680원이며 현재 설정으로 재계산하거나 이중 공제하지 않는다.
+3. 원본 거래를 수정하는 자동 migration은 없다. 기존 정상 snapshot의 공제 후 값은 그대로 이용 가능하다. 외부 복원 등으로 잘못된 snapshot 자체가 들어온 경우까지 안전한 복구를 보장할 수 없어 임의 보정하지 않는다.
+4. 새 일반 거래에는 optional settlementSettingsSnapshot을 깊은 복사로 저장한다. 수정 시 이 당시 규칙을 우선하며 id/createdAt을 보존한다. 기존 거래에는 고객별 요율 전체/재료비 방식/카드수수료율이 없어 정확한 역산이 불가능하다. 따라서 기존 거래의 날짜·시술·메모만 바꾸면 기존 결과 유지, 금액·고객유형·결제수단 변경은 표시된 현재 설정을 사용자가 체크박스로 명시적으로 동의해야 저장된다. 현재 설정을 조용히 적용하지 않는다.
+5. history와 일별 상세에서 공용 TransactionActions 사용. 폼 미리 채움, 첫 오류 focus/scroll, 성공 오버레이, 최소 48px 버튼, 삭제 확인 오버레이 지원. 삭제는 transactions store의 해당 id만 제거하며 화면 state도 갱신한다.
+6. 이용권 삭제는 공용 hasPassActivity/assertPassDeletable로 PURCHASE 이외 이벤트가 하나라도 있으면 차단한다. UI에서 확인창 전에 안내하고 storage에서도 최신 이벤트를 다시 조회해 쓰기 전에 거부한다. PURCHASE만 있는 미사용 이용권은 pass+구매 이벤트 삭제 가능. 이벤트 없는 기존 레코드도 기존 삭제 정책 유지.
+7. 정액권/회원권 엔진, 할인/보너스 계산, IndexedDB schema/version, backup/restore 형식은 변경하지 않았다. optional 규칙 snapshot은 기존 객체 저장/백업 직렬화에 포함된다.
+
+### 검증
+- 신규 테스트 19개, 총 134개 통과. 기존 115개 중 113개 무수정, 사용 이력 전체 삭제를 기대했던 2개는 새 삭제 금지 요구와 직접 충돌하므로 원인 확인 후 “거부 및 데이터 보존”으로 전환했다. 테스트를 삭제하거나 skip하지 않았다.
+- lint / Production build 통과.
+- 로컬 별도 origin 127.0.0.1:3107 브라우저 확인: 10만원/3.3% ON 미리보기 및 저장 내역 38,680원, 20만원 수정 77,360원, 월정산/일별 상세 일치. 일별 상세에서 삭제 후 당일/월 합계 0원 확인. 회원권 구매 후 1회 사용(9/10회) 상태에서 삭제 차단 안내 확인.
+- 360px 수정 폼, 390px 삭제 확인, 430px 삭제 차단 오버레이 확인. 실제 휴대폰 키보드 검증은 별도 필요하다.
+- 브라우저 테스트는 Production 데이터와 분리된 로컬 origin의 합성 데이터만 사용했다.
+
+## 이전 작업 기록
+
+
 
 작업 브랜치 안내: main은 실사용자 Production 안정판이다. 정액권 stale state 버그 수정
 + 앱 내 사용 설명서 PART까지는 dev에서 검증 후 main에 fast-forward merge + push

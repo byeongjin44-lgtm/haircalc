@@ -2,6 +2,7 @@
 // 기존 저장된 snapshot(settlementAmount 등)을 그대로 합산할 뿐,
 // 현재 SettlementSettings로 재계산하지 않는다.
 
+import { transactionPayout } from "./transaction.ts";
 import { monthKeyOf } from "./month.ts";
 import type { MembershipEvent, PrepaidEvent, Transaction } from "./types.ts";
 
@@ -42,7 +43,7 @@ export function groupByDate(
 export function summarizeTransactions(transactions: Transaction[]): PeriodSummary {
   const totalAmount = transactions.reduce((sum, tx) => sum + tx.amount, 0);
   const totalSettlementAmount = transactions.reduce(
-    (sum, tx) => sum + tx.settlementAmount,
+    (sum, tx) => sum + transactionPayout(tx),
     0
   );
   const transactionCount = transactions.length;

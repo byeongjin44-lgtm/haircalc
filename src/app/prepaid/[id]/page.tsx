@@ -1,5 +1,7 @@
 "use client";
 
+import DeletionBlockedOverlay from "@/components/DeletionBlockedOverlay";
+import { hasPassActivity, PASS_DELETE_BLOCKED } from "@/lib/settlement/passDeletion";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -62,6 +64,7 @@ export default function PrepaidDetailPage() {
   const [events, setEvents] = useState<PrepaidEvent[]>([]);
   const [activeAction, setActiveAction] = useState<ActionType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -110,6 +113,8 @@ export default function PrepaidDetailPage() {
     } catch (e) {
       // 삭제 실패 시에는 성공 오버레이/이동 없이 화면에 오류만 남긴다.
       setDeleteError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      setShowDeleteConfirm(false);
+      setBlockedMessage(e instanceof Error ? e.message : "삭제에 실패했습니다.");
       setIsDeleting(false);
       return;
     }
@@ -284,6 +289,7 @@ export default function PrepaidDetailPage() {
           type="button"
           onClick={() => {
             setDeleteError(null);
+            if (hasPassActivity(events)) { setBlockedMessage(PASS_DELETE_BLOCKED); return; }
             setShowDeleteConfirm(true);
           }}
           className="min-h-[48px] rounded-xl border border-red-600 py-3 text-center text-sm font-semibold text-red-600"
@@ -293,6 +299,7 @@ export default function PrepaidDetailPage() {
         {deleteError && <p className="text-center text-sm text-red-500">{deleteError}</p>}
       </section>
 
+      {blockedMessage && <DeletionBlockedOverlay message={blockedMessage} onClose={() => setBlockedMessage(null)} />}
       {showDeleteConfirm && (
         <div
           role="alertdialog"
@@ -302,8 +309,7 @@ export default function PrepaidDetailPage() {
           <div className="flex w-full max-w-[340px] flex-col gap-3 rounded-2xl bg-white p-6 text-center shadow-xl">
             <p className="text-base font-semibold text-zinc-900">이 정액권을 삭제할까요?</p>
             <p className="text-sm text-zinc-500">
-              정액권과 연결된 사용/환불/조정 내역도 함께 삭제되며 월정산 결과가 변경될 수
-              있습니다.
+              미사용 정액권과 구매 기록이 함께 삭제되며 월정산 결과가 변경될 수 있습니다.
             </p>
             <div className="mt-1 flex gap-2">
               <button

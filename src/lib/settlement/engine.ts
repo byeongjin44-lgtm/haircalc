@@ -130,6 +130,7 @@ export function buildTransactionSnapshot(
     customerType: input.customerType,
     serviceType: input.serviceType,
     paymentType: input.paymentType,
+    settlementSettingsSnapshot: structuredClone(settings),
     commissionRateSnapshot: result.commissionRate,
     vatModeSnapshot: result.vatMode,
     vatDeduction: result.vatDeduction,

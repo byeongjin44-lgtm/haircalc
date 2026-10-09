@@ -4,6 +4,8 @@
 // 이전에는 localStorage를 동기로 읽고 썼지만, 이제는 IndexedDB 기반이라 전부 비동기다.
 // 최초 호출 시 legacy localStorage(v1) 데이터를 IndexedDB로 자동 이전한다 (ensureMigrated).
 
+import { assertPassDeletable } from "./passDeletion.ts";
+import { editTransaction, type TransactionEdit } from "./transaction.ts";
 import { createDefaultSettlementSettings } from "./engine.ts";
 import { buildBackup, restoreBackup, type BackupData } from "./backup.ts";
 import { clearLegacyLocalStorage, ensureMigrated } from "./migration.ts";
@@ -123,6 +125,7 @@ export async function deletePrepaidPassFromStore(
   passId: string
 ): Promise<void> {
   const events = await store.getAll<PrepaidEvent>("prepaidEvents");
+  assertPassDeletable(events.filter(event => event.prepaidPassId === passId));
   for (const event of events) {
     if (event.prepaidPassId === passId) {
       await store.delete("prepaidEvents", event.id);
@@ -178,6 +181,7 @@ export async function deleteMembershipPassFromStore(
   passId: string
 ): Promise<void> {
   const events = await store.getAll<MembershipEvent>("membershipEvents");
+  assertPassDeletable(events.filter(event => event.membershipPassId === passId));
   for (const event of events) {
     if (event.membershipPassId === passId) {
       await store.delete("membershipEvents", event.id);
@@ -214,4 +218,21 @@ export async function wipeAllData(): Promise<void> {
     await indexedDbStore.clear(name);
   }
   clearLegacyLocalStorage();
+}
+
+export async function updateTransactionFromStore(store: RecordStore, id: string, input: TransactionEdit, confirmedRules?: SettlementSettings): Promise<Transaction> {
+  const original = await store.get<Transaction>("transactions", id);
+  if (!original) throw new Error("거래를 찾을 수 없습니다.");
+  const updated = editTransaction(original, input, new Date().toISOString(), confirmedRules);
+  await store.put("transactions", updated);
+  return updated;
+}
+export async function updateTransaction(id: string, input: TransactionEdit, confirmedRules?: SettlementSettings): Promise<Transaction> {
+  return updateTransactionFromStore(await ready(), id, input, confirmedRules);
+}
+export async function deleteTransactionFromStore(store: RecordStore, id: string): Promise<void> {
+  await store.delete("transactions", id);
+}
+export async function deleteTransaction(id: string): Promise<void> {
+  await deleteTransactionFromStore(await ready(), id);
 }

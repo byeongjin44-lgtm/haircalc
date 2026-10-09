@@ -73,6 +73,8 @@ export interface SettlementResult {
  * 이후 SettlementSettings가 바뀌어도 이 값들은 재계산하지 않는다.
  */
 export interface Transaction {
+  /** Full rules for explicit edits; absent in legacy records. */
+  settlementSettingsSnapshot?: SettlementSettings;
   id: string;
   date: string; // YYYY-MM-DD
   amount: number;

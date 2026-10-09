@@ -1,5 +1,7 @@
 "use client";
 
+import TransactionActions from "@/components/TransactionActions";
+import { transactionPayout } from "@/lib/settlement/transaction";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -55,7 +57,7 @@ export default function HistoryPage() {
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                 <span className="text-sm text-zinc-500">{tx.date}</span>
                 <span className="text-lg font-bold tabular-nums">
-                  {formatWon(tx.settlementAmount)}
+                  {formatWon(transactionPayout(tx))}
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-zinc-500">
@@ -71,6 +73,7 @@ export default function HistoryPage() {
                   예상 지급액 (3.3% 반영) {formatWon(tx.estimatedPayoutAmount)}
                 </p>
               )}
+              <TransactionActions transaction={tx} onChanged={updated => setTransactions(prev => prev ? (updated ? prev.map(item => item.id === tx.id ? updated : item) : prev.filter(item => item.id !== tx.id)) : prev)} />
               {tx.memo && <p className="mt-1 text-xs text-zinc-400">{tx.memo}</p>}
             </li>
           ))}

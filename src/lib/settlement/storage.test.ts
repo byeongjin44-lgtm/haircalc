@@ -39,7 +39,7 @@ function makePrepaidEvent(overrides: Partial<PrepaidEvent> = {}): PrepaidEvent {
 }
 
 describe("E. deletePrepaidPassFromStore", () => {
-  test("삭제 대상 pass와 연결된 이벤트만 제거하고 다른 pass/이벤트는 그대로 둔다", async () => {
+  test("사용 이력이 있으면 삭제를 거부하고 모든 pass/이벤트를 보존한다", async () => {
     const store = createMemoryStore();
 
     await store.put("prepaidPasses", makePrepaidPass({ id: "pass-1" }));
@@ -51,18 +51,18 @@ describe("E. deletePrepaidPassFromStore", () => {
     );
     await store.put("prepaidEvents", makePrepaidEvent({ id: "evt-3", prepaidPassId: "pass-2" }));
 
-    await deletePrepaidPassFromStore(store, "pass-1");
+    await assert.rejects(() => deletePrepaidPassFromStore(store, "pass-1"));
 
     const remainingPasses = await store.getAll<PrepaidPass>("prepaidPasses");
     const remainingEvents = await store.getAll<PrepaidEvent>("prepaidEvents");
 
     assert.deepEqual(
       remainingPasses.map((p) => p.id),
-      ["pass-2"]
+      ["pass-1", "pass-2"]
     );
     assert.deepEqual(
       remainingEvents.map((e) => e.id).sort(),
-      ["evt-3"]
+      ["evt-1", "evt-2", "evt-3"]
     );
   });
 
@@ -107,7 +107,7 @@ function makeMembershipEvent(overrides: Partial<MembershipEvent> = {}): Membersh
 }
 
 describe("H. deleteMembershipPassFromStore", () => {
-  test("삭제 대상 pass와 연결된 이벤트만 제거하고 다른 pass/이벤트는 그대로 둔다", async () => {
+  test("사용 이력이 있으면 삭제를 거부하고 모든 pass/이벤트를 보존한다", async () => {
     const store = createMemoryStore();
 
     await store.put("membershipPasses", makeMembershipPass({ id: "membership-1" }));
@@ -125,18 +125,18 @@ describe("H. deleteMembershipPassFromStore", () => {
       makeMembershipEvent({ id: "m-evt-3", membershipPassId: "membership-2" })
     );
 
-    await deleteMembershipPassFromStore(store, "membership-1");
+    await assert.rejects(() => deleteMembershipPassFromStore(store, "membership-1"));
 
     const remainingPasses = await store.getAll<MembershipPass>("membershipPasses");
     const remainingEvents = await store.getAll<MembershipEvent>("membershipEvents");
 
     assert.deepEqual(
       remainingPasses.map((p) => p.id),
-      ["membership-2"]
+      ["membership-1", "membership-2"]
     );
     assert.deepEqual(
       remainingEvents.map((e) => e.id).sort(),
-      ["m-evt-3"]
+      ["m-evt-1", "m-evt-2", "m-evt-3"]
     );
   });
 
