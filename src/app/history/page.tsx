@@ -73,7 +73,7 @@ export default function HistoryPage() {
                   예상 지급액 (3.3% 반영) {formatWon(tx.estimatedPayoutAmount)}
                 </p>
               )}
-              <TransactionActions transaction={tx} onChanged={updated => setTransactions(prev => prev ? (updated ? prev.map(item => item.id === tx.id ? updated : item) : prev.filter(item => item.id !== tx.id)) : prev)} />
+              <TransactionActions transaction={tx} onDeleted={() => setTransactions(prev => prev ? prev.filter(item => item.id !== tx.id) : prev)} />
               {tx.memo && <p className="mt-1 text-xs text-zinc-400">{tx.memo}</p>}
             </li>
           ))}

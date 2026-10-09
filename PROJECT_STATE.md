@@ -2,9 +2,20 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-10-07
+마지막 업데이트: 2026-10-09
 
-## 현재 작업 — 3.3% 집계 / 일반 거래 수정·삭제 / 이용권 삭제 보호
+## 최신 결정 — 일반 거래 수정 기능 제거 (2026-10-09)
+
+- dev / origin/dev 기준: ab0c7d8. main / origin/main: 3c05055. 이번 작업은 dev 미커밋이며 commit/push/merge하지 않는다.
+- 저장된 일반 Transaction은 immutable로 취급한다. 잘못 등록한 거래는 삭제 후 다시 등록하며 삭제 기능만 유지한다.
+- history와 일별 상세의 수정 버튼, 수정 모달/form/validation/현재 설정 동의 안내, editTransaction 및 updateTransaction 전용 함수를 제거했다. 별도 수정 route는 없었다.
+- 공용 삭제 확인/성공 피드백, Transaction 삭제 및 목록 갱신, 3.3% 합산, snapshot 생성, RecordStore, 이용권 삭제 보호는 유지한다.
+- 설명서에는 일반 거래 수정 가능 안내가 없어 변경하지 않았다.
+- 수정 전용 테스트 4개만 제거하고 snapshot 설정 불변 테스트는 재계산 대신 저장된 규칙 보존을 검증한다. 3.3%/삭제/summary/이용권 보호 테스트는 유지한다.
+- 검증: npm run lint / npm test (130/130, 실패·skip 0) / npm run build 통과. history/일별 상세 공용 UI에서 수정 버튼과 관련 참조가 없음을 코드 검색으로 확인했다. 이번 작업에서는 실기기 UI 테스트를 재실행하지 않았다.
+- 아래 수정 기능 구현 기록은 과거 기록이며, 현재 제품 정책은 이 최신 결정을 따른다.
+
+## 이전 작업 — 3.3% 집계 / 일반 거래 수정·삭제 / 이용권 삭제 보호
 
 - 기준: main / origin/main / dev / origin/dev = `3c05055468a529c9d82c34311b85f7c427ab3eaf`.
 - 이번 변경은 dev 작업 트리에만 존재한다. 커밋/push/merge하지 않는다.

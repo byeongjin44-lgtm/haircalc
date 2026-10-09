@@ -142,7 +142,7 @@ export default function DailyDetailPage() {
                   <span>적용 인센티브율 {Math.round(tx.commissionRateSnapshot * 100)}%</span>
                   <span>정산액 {formatWon(transactionPayout(tx))}</span>
                 </div>
-                <TransactionActions transaction={tx} onChanged={updated => setTransactions(prev => prev ? (updated ? prev.map(item => item.id === tx.id ? updated : item) : prev.filter(item => item.id !== tx.id)) : prev)} />
+                <TransactionActions transaction={tx} onDeleted={() => setTransactions(prev => prev ? prev.filter(item => item.id !== tx.id) : prev)} />
               {tx.memo && <p className="mt-1 text-xs text-zinc-400">{tx.memo}</p>}
               </li>
             ))}

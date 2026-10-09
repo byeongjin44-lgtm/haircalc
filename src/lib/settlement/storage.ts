@@ -5,7 +5,6 @@
 // 최초 호출 시 legacy localStorage(v1) 데이터를 IndexedDB로 자동 이전한다 (ensureMigrated).
 
 import { assertPassDeletable } from "./passDeletion.ts";
-import { editTransaction, type TransactionEdit } from "./transaction.ts";
 import { createDefaultSettlementSettings } from "./engine.ts";
 import { buildBackup, restoreBackup, type BackupData } from "./backup.ts";
 import { clearLegacyLocalStorage, ensureMigrated } from "./migration.ts";
@@ -220,16 +219,6 @@ export async function wipeAllData(): Promise<void> {
   clearLegacyLocalStorage();
 }
 
-export async function updateTransactionFromStore(store: RecordStore, id: string, input: TransactionEdit, confirmedRules?: SettlementSettings): Promise<Transaction> {
-  const original = await store.get<Transaction>("transactions", id);
-  if (!original) throw new Error("거래를 찾을 수 없습니다.");
-  const updated = editTransaction(original, input, new Date().toISOString(), confirmedRules);
-  await store.put("transactions", updated);
-  return updated;
-}
-export async function updateTransaction(id: string, input: TransactionEdit, confirmedRules?: SettlementSettings): Promise<Transaction> {
-  return updateTransactionFromStore(await ready(), id, input, confirmedRules);
-}
 export async function deleteTransactionFromStore(store: RecordStore, id: string): Promise<void> {
   await store.delete("transactions", id);
 }
