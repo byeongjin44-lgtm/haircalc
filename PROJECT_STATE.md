@@ -2,11 +2,62 @@
 
 # 프리랜서 미용사 월급/정산 계산기 — PROJECT STATE
 
-마지막 업데이트: 2026-10-09
+마지막 업데이트: 2026-10-14
 
-## 최신 결정 — 일반 거래 수정 기능 제거 (2026-10-09)
+## 현재 상태 — HairCalc v0.1.0 릴리스 완료 (2026-10-14)
 
-- dev / origin/dev 기준: ab0c7d8. main / origin/main: 3c05055. 이번 작업은 dev 미커밋이며 commit/push/merge하지 않는다.
+- v0.1.0 릴리스 완료. 릴리스 코드 기준 commit: `8d7a8716ff06d0754ca64df353ecd1441c732de6` (8d7a871).
+- main / origin/main / dev / origin/dev 동기화 완료.
+- annotated tag `v0.1.0` (메시지 "HairCalc v0.1.0") → 8d7a871 생성 및 origin push 완료. 태그는 수정/이동/재생성하지 않는다.
+- Production: https://haircalc.vercel.app/
+- 검증: npm test 130/130 (실패·skip 0), npm run lint / npm run build 통과, working tree clean.
+- 이 문서 갱신 commit(`docs: mark haircalc v0.1.0 release`)은 태그 이후 문서 전용 commit이며 코드 변경은 없다.
+
+### v0.1.0 포함 기능
+- 일반 거래 등록 (고객유형별 인센티브: 신규/재방문/지정)
+- VAT 처리, 카드수수료, 재료비(% / 고정값), 3.3% 원천징수 ON/OFF
+- 거래 저장 시 정산 결과/규칙 snapshot 보존
+- 일반 거래 삭제
+- 월정산(상단 요약 + 달력) / 날짜별 일별 상세
+- 실제 지급액 입력 및 예상 정산액과의 차이 비교
+- 정액권(별도 PrepaidPass / PrepaidEvent 원장): 판매 즉시 반영 / 사용 시 반영
+- 정액권 보너스(paidAmount / creditAmount 분리), 보너스 정산 기준: 실결제 비율 환산(PAID_RATIO) / 차감금액 기준(CREDIT_AMOUNT)
+- 정액권 사용 할인율
+- 회원권(횟수 차감형)
+- 타 디자이너 사용 반영
+- 이용권 삭제 보호(사용 이력 있으면 삭제 차단)
+- IndexedDB 로컬 저장
+- JSON 백업 / 복원
+- PWA (manifest, service worker, 홈 화면 설치)
+- 앱 내 사용 설명서
+
+### 현재 정책
+- 일반 거래는 수정하지 않는다(immutable). 잘못 등록한 일반 거래는 삭제 후 재등록한다.
+- 사용 이력(PURCHASE 외 이벤트)이 있는 정액권/회원권은 삭제할 수 없다.
+- 이용권 잔액/잔여 횟수는 앱에 기록한 내역 기준이다(매장 POS와 자동 연동되지 않음).
+- 데이터는 현재 기기 브라우저(IndexedDB)에만 로컬 저장된다. 클라우드 동기화 없음. 기기 변경/브라우저 데이터 삭제 대비는 JSON 백업으로 한다.
+- 타 디자이너 사용은 사용자가 직접 기록해야 반영된다.
+
+### NEXT — v0.1.0 공개 베타 / 실사용자 피드백 수집
+다음 단계는 기능 개발이 아니라 공개 베타 운영과 실사용자 피드백 수집이다.
+
+우선 관찰 항목:
+- 실제 급여명세와 계산 일치 여부
+- 매장별 정산 정책 예외
+- 입력 UX
+- 정액권/회원권 이해도
+- 백업/복원 문제
+- 데이터 유실 여부
+
+새 기능은 실제 사용자 피드백 없이 임의 추가하지 않는다. 피드백으로 확인된 오류 수정을 우선한다.
+
+---
+
+아래는 v0.1.0 이전 작업 기록이다. 기록 안의 "dev 미커밋", "main 미병합", 특정 commit 기준 등은 당시 상태이며, 현재는 모두 8d7a871(v0.1.0)에 반영되어 있다.
+
+## 이전 결정 — 일반 거래 수정 기능 제거 (2026-10-09)
+
+- 당시 기준 dev: ab0c7d8, main: 3c05055. 이후 8d7a871로 commit되어 main/dev에 반영되었다.
 - 저장된 일반 Transaction은 immutable로 취급한다. 잘못 등록한 거래는 삭제 후 다시 등록하며 삭제 기능만 유지한다.
 - history와 일별 상세의 수정 버튼, 수정 모달/form/validation/현재 설정 동의 안내, editTransaction 및 updateTransaction 전용 함수를 제거했다. 별도 수정 route는 없었다.
 - 공용 삭제 확인/성공 피드백, Transaction 삭제 및 목록 갱신, 3.3% 합산, snapshot 생성, RecordStore, 이용권 삭제 보호는 유지한다.
@@ -923,6 +974,8 @@ PrepaidEvent, MonthlyAdjustment, MonthlyActualPayout 타입을 정의했고,
 ---
 
 ## 6. 다음 작업
+
+현재 NEXT는 문서 상단 "NEXT — v0.1.0 공개 베타 / 실사용자 피드백 수집"이다. 아래 NEXT 1~7은 v0.1.0까지의 과거 기록이다.
 
 ### NEXT 1 — 프로젝트 생성 (완료)
 Claude Code로:
